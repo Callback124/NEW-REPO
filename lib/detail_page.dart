@@ -231,49 +231,38 @@ class _DetailPageState extends State<DetailPage> {
                   sliver: SliverGrid.builder(
                     itemCount: list.length,
                     gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 280,
-                      mainAxisExtent: 112,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
+                      maxCrossAxisExtent: 76,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      childAspectRatio: 1,
                     ),
                     itemBuilder: (context, i) {
                       final e = list[i];
-                      final pr = app.progress[progressKey(d, e)];
+                      final seasonLabel = 'S${e.season.toString().padLeft(2, '0')}';
+                      final episodeNumber = e.episode == 0 ? i + 1 : e.episode;
+                      final episodeLabel = 'E${episodeNumber.toString().padLeft(2, '0')}';
                       return Card(
+                        margin: EdgeInsets.zero,
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => _play(d, e),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        e.episode == 0 ? 'Episode ${i + 1}' : 'Episode ${e.episode}',
-                                        style: TextStyle(
-                                          color: cs.primary,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                    Icon(Icons.play_circle_outline, color: cs.primary, size: 20),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Expanded(
-                                  child: Text(e.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                                ),
-                                if (pr != null && pr.frac > .01)
-                                  LinearProgressIndicator(value: pr.frac, minHeight: 3),
-                              ],
-                            ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(seasonLabel,
+                                style: TextStyle(
+                                  color: cs.primary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                )),
+                              const SizedBox(height: 3),
+                              Text(episodeLabel,
+                                style: TextStyle(
+                                  color: cs.onSurface,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                )),
+                            ],
                           ),
                         ),
                       );
