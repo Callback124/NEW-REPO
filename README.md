@@ -46,7 +46,11 @@ If `flutter pub get` reports a version conflict, run `flutter pub upgrade`.
 The workflow generates the Android project on the fly, adds the INTERNET permission, and builds a release APK.
 It is signed with the debug key, which is fine for personal use. A Play Store release needs your own signing key.
 
-## Providers
+## Built-in provider
+
+MovieBox is enabled by default. Its homepage is loaded from the MovieBox homepage API, including the featured banner and category shelves. Search filters titles returned by the homepage catalog. The supplied API guide does not include detail or playback endpoints, so streaming is not enabled yet.
+
+## Additional providers
 
 Settings → Add provider accepts:
 
@@ -75,7 +79,7 @@ Repository format: `{ "name": "…", "providers": [{ "name": "…", "url": "http
 | --- | --- |
 | `lib/models.dart` | Item, Episode, Source, ProviderDef |
 | `lib/store.dart` | App state, saved on the device |
-| `lib/providers.dart` | Internet Archive, Stremio and JSON adapters, link detection |
+| `lib/providers.dart` | MovieBox, Stremio and JSON adapters, link detection |
 | `lib/widgets.dart` | Poster cards, shelves, grids |
 | `lib/home_page.dart`, `search_page.dart`, `library_page.dart`, `settings_page.dart` | Tabs |
 | `lib/detail_page.dart`, `player_page.dart` | Title page and player (media_kit) |
