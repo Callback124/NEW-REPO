@@ -40,7 +40,6 @@ class Episode {
     this.episode = 0,
     required this.title,
     this.sources = const [],
-    this.detailPath,
   });
 
   final String id;
@@ -76,6 +75,7 @@ class Item {
     this.genres = const [],
     this.episodes = const [],
     this.sources = const [],
+    this.detailPath,
   });
 
   final String pid;
