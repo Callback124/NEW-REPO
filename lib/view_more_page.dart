@@ -36,11 +36,11 @@ class _MovieBoxViewMorePageState extends State<MovieBoxViewMorePage> {
     }
     setState(() { _loading = true; _error = null; });
     try {
-      final rows = await MovieBoxAdapter().viewMore(provider, id, page: _page);
+      final result = await MovieBoxAdapter().viewMore(provider, id, page: _page);
       if (!mounted) return;
       setState(() {
-        _items.addAll(rows);
-        _hasMore = rows.length >= 20;
+        _items.addAll(result.items);
+        _hasMore = result.hasMore;
         _page++;
         _loading = false;
       });
