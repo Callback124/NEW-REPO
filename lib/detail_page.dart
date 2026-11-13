@@ -18,12 +18,14 @@ class DetailPage extends StatefulWidget {
 class _DetailPageState extends State<DetailPage> {
   late Future<Item> _f = detailOf(_sourceItem);
   int? _season;
+  int _rangeStart = 0;
   late Item _sourceItem = widget.item;
 
   void _selectDub(DubOption dub) {
     setState(() {
       _sourceItem = _sourceItem.copyWith(id: dub.subjectId, detailPath: dub.detailPath);
       _season = null;
+      _rangeStart = 0;
       _f = detailOf(_sourceItem);
     });
   }
@@ -74,6 +76,9 @@ class _DetailPageState extends State<DetailPage> {
           final seasons = (eps.map((e) => e.season).toSet().toList()..sort());
           if (eps.isNotEmpty) _season ??= (_lastEp(d) ?? eps.first).season;
           final list = eps.where((e) => e.season == _season).toList();
+          final rangeCount = (list.length + 99) ~/ 100;
+          if (_rangeStart >= rangeCount * 100) _rangeStart = 0;
+          final visibleEpisodes = list.skip(_rangeStart).take(100).toList();
           final tags = [
             d.type == 'movie' ? 'Movie' : (d.type == 'series' ? 'Series' : d.type),
             d.year,
@@ -151,18 +156,23 @@ class _DetailPageState extends State<DetailPage> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: [
-                          for (final dub in d.dubs)
-                            ChoiceChip(
-                              showCheckmark: false,
-                              label: Text(dub.language + (dub.original ? ' · Original' : '')),
-                              selected: dub.subjectId == d.id && dub.detailPath == d.detailPath,
-                              onSelected: (_) => _selectDub(dub),
-                            ),
-                        ],
+                      child: SizedBox(
+                        height: 42,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            for (final dub in d.dubs)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  showCheckmark: false,
+                                  label: Text(dub.language + (dub.original ? ' · Original' : '')),
+                                  selected: dub.subjectId == d.id && dub.detailPath == d.detailPath,
+                                  onSelected: (_) => _selectDub(dub),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -221,9 +231,37 @@ class _DetailPageState extends State<DetailPage> {
                             Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
+                                showCheckmark: false,
                                 label: Text(s == 0 ? 'Specials' : 'Season $s'),
                                 selected: s == _season,
-                                onSelected: (_) => setState(() => _season = s),
+                                onSelected: (_) => setState(() {
+                                  _season = s;
+                                  _rangeStart = 0;
+                                }),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (rangeCount > 1)
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 52,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        children: [
+                          for (var r = 0; r < rangeCount; r++)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                showCheckmark: false,
+                                label: Text(
+                                  '${(r * 100 + 1).toString().padLeft(3, '0')}-${((r + 1) * 100 < list.length ? (r + 1) * 100 : list.length).toString().padLeft(3, '0')}',
+                                ),
+                                selected: _rangeStart == r * 100,
+                                onSelected: (_) => setState(() => _rangeStart = r * 100),
                               ),
                             ),
                         ],
@@ -233,7 +271,7 @@ class _DetailPageState extends State<DetailPage> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                   sliver: SliverGrid.builder(
-                    itemCount: list.length,
+                    itemCount: visibleEpisodes.length,
                     gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent: 76,
                       mainAxisSpacing: 8,
@@ -241,7 +279,7 @@ class _DetailPageState extends State<DetailPage> {
                       childAspectRatio: 1,
                     ),
                     itemBuilder: (context, i) {
-                      final e = list[i];
+                      final e = visibleEpisodes[i];
                       final seasonLabel = 'S${e.season.toString().padLeft(2, '0')}';
                       final episodeNumber = e.episode == 0 ? i + 1 : e.episode;
                       final episodeLabel = 'E${episodeNumber.toString().padLeft(2, '0')}';
