@@ -300,6 +300,9 @@ class MovieBoxAdapter extends Adapter {
           (subject['genres'] is List ? (subject['genres'] as List).map((e) => e.toString()).toList() : const <String>[]))
           .map((e) => e.trim()).where((e) => e.isNotEmpty).take(4).toList(),
       detailPath: (subject['detailPath'] ?? raw['detailPath'])?.toString(),
+      corner: ((subject['corner'] ?? raw['corner'])?.toString().trim().isNotEmpty ?? false)
+          ? (subject['corner'] ?? raw['corner']).toString().trim()
+          : null,
     );
   }
 
