@@ -26,7 +26,6 @@ class Poster extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final letter = title.isEmpty ? '?' : String.fromCharCode(title.runes.first).toUpperCase();
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: AspectRatio(
@@ -37,9 +36,8 @@ class Poster extends StatelessWidget {
             ColoredBox(
               color: cs.surfaceContainerHighest,
               child: Center(
-                child: Text(letter,
-                    style: TextStyle(
-                        fontSize: 32, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                child: Icon(Icons.movie_creation_rounded,
+                    size: 38, color: cs.onSurfaceVariant.withValues(alpha: 0.72)),
               ),
             ),
             if (isHttp(url))
