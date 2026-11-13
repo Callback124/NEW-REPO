@@ -97,7 +97,8 @@ class _DownloadsPageState extends State<DownloadsPage> {
                   ]),
                   trailing: PopupMenuButton<String>(
                     onSelected: (v) async {
-                      if (v == 'play') await _playOffline(r);\n                      if (v == 'open') await DownloadService.instance.open(r.id);
+                      if (v == 'play') await _playOffline(r);
+                      if (v == 'open') await DownloadService.instance.open(r.id);
                       if (v == 'cancel') await DownloadService.instance.cancel(r.id);
                       if (v == 'remove') await DownloadService.instance.forget(r.id);
                     },
