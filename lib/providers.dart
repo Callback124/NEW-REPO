@@ -381,7 +381,7 @@ class StremioAdapter extends Adapter {
 class JsonAdapter extends Adapter {
   Future<List<Map>> _items(ProviderDef p) async {
     dynamic d = p.data ?? await cachedJson(p.url!);
-    if (d is List) d = {'items': d};
+    if (d is List) d = <String, dynamic>{'items': d};
     return ((d['items'] as List?) ?? []).whereType<Map>().toList();
   }
 
@@ -508,7 +508,7 @@ Future<DetectResult> detect(String text) async {
     url = u;
     data = await getJson(u);
   }
-  if (data is List) data = {'items': data};
+  if (data is List) data = <String, dynamic>{'items': data};
   if (data is! Map) throw ProviderError('This format is not recognized.');
   final m = Map<String, dynamic>.from(data);
 
