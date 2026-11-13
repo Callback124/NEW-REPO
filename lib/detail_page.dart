@@ -226,28 +226,59 @@ class _DetailPageState extends State<DetailPage> {
                       ),
                     ),
                   ),
-                SliverList.builder(
-                  itemCount: list.length,
-                  itemBuilder: (context, i) {
-                    final e = list[i];
-                    final pr = app.progress[progressKey(d, e)];
-                    return ListTile(
-                      leading: SizedBox(
-                          width: 32,
-                          child: Center(
-                              child: Text('${e.episode == 0 ? i + 1 : e.episode}',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)))),
-                      title: Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: pr != null && pr.frac > .01
-                          ? Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: LinearProgressIndicator(value: pr.frac, minHeight: 3))
-                          : null,
-                      trailing: const Icon(Icons.play_arrow, size: 20),
-                      onTap: () => _play(d, e),
-                    );
-                  },
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  sliver: SliverGrid.builder(
+                    itemCount: list.length,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 280,
+                      mainAxisExtent: 112,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                    ),
+                    itemBuilder: (context, i) {
+                      final e = list[i];
+                      final pr = app.progress[progressKey(d, e)];
+                      return Card(
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () => _play(d, e),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        e.episode == 0 ? 'Episode ${i + 1}' : 'Episode ${e.episode}',
+                                        style: TextStyle(
+                                          color: cs.primary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(Icons.play_circle_outline, color: cs.primary, size: 20),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Expanded(
+                                  child: Text(e.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                                ),
+                                if (pr != null && pr.frac > .01)
+                                  LinearProgressIndicator(value: pr.frac, minHeight: 3),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 40)),
               ],
