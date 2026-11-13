@@ -451,7 +451,10 @@ class MovieBoxAdapter extends Adapter {
 
   @override
   Future<List<Source>> sources(ProviderDef p, Item item, Episode? ep) async {
-    final series = item.subjectType == 2 || item.type == 'series';
+    // MovieBox search metadata can omit the series type; a selected episode
+    // or a populated episode list is also a reliable series indicator.
+    final series = ep != null || item.episodes.isNotEmpty ||
+        item.subjectType == 2 || item.type == 'series';
     final se = series ? (ep?.season ?? 1) : 0;
     final number = series ? (ep?.episode ?? 1) : 0;
     const playerHeaders = {
