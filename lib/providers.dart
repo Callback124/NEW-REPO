@@ -201,8 +201,32 @@ class MovieBoxAdapter extends Adapter {
       request.headers['Content-Type'] = 'application/json; charset=utf-8';
       request.body = jsonEncode(body ?? const {});
     }
-    final streamed = await _client.send(request).timeout(const Duration(seconds: 25));
-    final response = await http.Response.fromStream(streamed);
+    http.Response response;
+    try {
+      final streamed = await _client.send(request).timeout(const Duration(seconds: 25));
+      response = await http.Response.fromStream(streamed);
+    } catch (_) {
+      final fallbackUri = Uri.parse(_web + '/wefeed-h5api-bff/' + path)
+          .replace(queryParameters: query);
+      final fallbackRequest = http.Request(method, fallbackUri)..headers.addAll(headers);
+      if (method == 'POST') {
+        fallbackRequest.headers['Content-Type'] = 'application/json; charset=utf-8';
+        fallbackRequest.body = jsonEncode(body ?? const {});
+      }
+      final fallbackStream = await _client.send(fallbackRequest).timeout(const Duration(seconds: 25));
+      response = await http.Response.fromStream(fallbackStream);
+    }
+    if (response.statusCode == 403 || response.statusCode >= 500) {
+      final fallbackUri = Uri.parse(_web + '/wefeed-h5api-bff/' + path)
+          .replace(queryParameters: query);
+      final fallbackRequest = http.Request(method, fallbackUri)..headers.addAll(headers);
+      if (method == 'POST') {
+        fallbackRequest.headers['Content-Type'] = 'application/json; charset=utf-8';
+        fallbackRequest.body = jsonEncode(body ?? const {});
+      }
+      final fallbackStream = await _client.send(fallbackRequest).timeout(const Duration(seconds: 25));
+      response = await http.Response.fromStream(fallbackStream);
+    }
     final responseText = utf8.decode(response.bodyBytes);
     final invalid = response.statusCode == 401 ||
         responseText.toLowerCase().contains('invalid token') ||
