@@ -133,11 +133,19 @@ class _PlayerPageState extends State<PlayerPage> {
         if (value.isPlaying) _msg = null;
         _buffering = value.isBuffering;
       });
-      if (value.isPlaying) _kick();
+      if (value.isPlaying != _wasPlaying) {
+        _wasPlaying = value.isPlaying;
+        if (value.isPlaying) {
+          _kick();
+        } else {
+          _hideTimer?.cancel();
+        }
+      }
     }
   }
 
   bool _buffering = false;
+  bool _wasPlaying = false;
 
   Future<void> _load(Source s) async {
     final pr = app.progress[progressKey(widget.item, _ep)];
