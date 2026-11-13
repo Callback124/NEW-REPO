@@ -27,7 +27,7 @@ class DownloadRecord {
   final String? localUri;
   final int reason;
 
-  double get progress => total > 0 ? (downloaded / total).clamp(0, 1) : 0;
+  double get progress => total > 0 ? (downloaded / total).clamp(0, 1).toDouble() : 0;
   String get sizeLabel => total > 0 ? _bytes(total) : 'Size unknown';
 
   factory DownloadRecord.fromMap(Map m) => DownloadRecord(
