@@ -16,8 +16,17 @@ class DetailPage extends StatefulWidget {
 }
 
 class _DetailPageState extends State<DetailPage> {
-  late Future<Item> _f = detailOf(widget.item);
+  late Future<Item> _f = detailOf(_sourceItem);
   int? _season;
+  late Item _sourceItem = widget.item;
+
+  void _selectDub(DubOption dub) {
+    setState(() {
+      _sourceItem = _sourceItem.copyWith(id: dub.subjectId, detailPath: dub.detailPath);
+      _season = null;
+      _f = detailOf(_sourceItem);
+    });
+  }
 
   /// The episode to continue from: the most recently watched one, or the next if it was finished.
   Episode? _lastEp(Item d) {
@@ -138,6 +147,24 @@ class _DetailPageState extends State<DetailPage> {
                     ),
                   ),
                 ),
+                if (d.dubs.length > 1)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          for (final dub in d.dubs)
+                            ChoiceChip(
+                              label: Text(dub.language + (dub.original ? ' · Original' : '')),
+                              selected: dub.detailPath == d.detailPath,
+                              onSelected: (_) => _selectDub(dub),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (loading) const SliverToBoxAdapter(child: LinearProgressIndicator()),
                 SliverToBoxAdapter(
                   child: Padding(
