@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'bubble_nav_bar.dart';
 import 'downloads_page.dart';
+import 'downloads_service.dart';
 import 'home_page.dart';
 import 'library_page.dart';
 import 'search_page.dart';
@@ -11,6 +12,7 @@ import 'store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await app.init();
+  await DownloadService.instance.loadSettings();
   runApp(const StratusApp());
 }
 
