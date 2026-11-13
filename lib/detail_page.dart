@@ -192,7 +192,7 @@ class _DetailPageState extends State<DetailPage> {
                       title: 'Could not load this title',
                       text: err.toString(),
                       action: OutlinedButton(
-                        onPressed: () => setState(() => _f = detailOf(widget.item)),
+                        onPressed: () => setState(() => _f = detailOf(_sourceItem)),
                         child: const Text('Try again'),
                       ),
                     ),
