@@ -185,13 +185,29 @@ class _ContinueWatching extends StatelessWidget {
                     final pr = rs[i].value;
                     return Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: PosterCard(
-                        item: pr.item,
-                        progress: pr.frac,
-                        subtitle: pr.ep != null
-                            ? pr.ep!.label
-                            : '${((pr.d - pr.t) / 60).ceil().clamp(1, 9999)} min left',
-                        onTap: () => resumeProgress(context, pr),
+                      child: GestureDetector(
+                        onLongPress: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete from continue watching?'),
+                              content: Text('Remove "${pr.item.title}" from Continue watching?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                              ],
+                            ),
+                          );
+                          if (ok == true) app.removeProgress(pr.item, pr.ep);
+                        },
+                        child: PosterCard(
+                          item: pr.item,
+                          progress: pr.frac,
+                          subtitle: pr.ep != null
+                              ? pr.ep!.label
+                              : '${((pr.d - pr.t) / 60).ceil().clamp(1, 9999)} min left',
+                          onTap: () => resumeProgress(context, pr),
+                        ),
                       ),
                     );
                   },
