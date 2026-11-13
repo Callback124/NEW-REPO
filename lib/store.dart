@@ -13,7 +13,7 @@ class AppState extends ChangeNotifier {
   List<Item> library = [];
   Map<String, Progress> progress = {};
   String active = 'all';
-  ThemeMode theme = ThemeMode.dark;
+  ThemeMode theme = ThemeMode.light;
   bool autoplay = false;
 
   /// Bumped when watch progress changes, so only the "Continue watching" row rebuilds.
@@ -41,9 +41,9 @@ class AppState extends ChangeNotifier {
     }
     active = _sp.getString('active') ?? 'all';
     try {
-      theme = ThemeMode.values.byName(_sp.getString('theme') ?? 'dark');
+      theme = ThemeMode.values.byName(_sp.getString('theme') ?? 'light');
     } catch (_) {
-      theme = ThemeMode.dark;
+      theme = ThemeMode.light;
     }
     autoplay = _sp.getBool('autoplay') ?? false;
   }
