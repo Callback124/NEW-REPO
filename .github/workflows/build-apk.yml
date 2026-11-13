@@ -74,6 +74,15 @@ jobs:
           fi
           tail -12 android/build.gradle*
 
+      - name: Download provider placeholder image asset
+        run: |
+          mkdir -p assets
+          curl --fail --location --retry 3 --retry-delay 2 \\
+            'https://h5-static.aoneroom.com/ssrStatic/mbOfficial/public/_nuxt/image-1.apJjVir2.svg' \\
+            --output assets/provider_placeholder.svg
+          test -s assets/provider_placeholder.svg
+          head -c 80 assets/provider_placeholder.svg
+
       - run: flutter pub get
 
       - run: flutter build apk --release
