@@ -93,9 +93,10 @@ abstract class Adapter {
 }
 
 Adapter adapterFor(ProviderDef p) => switch (p.kind) {
+      'moviebox' => MovieBoxAdapter(),
       'stremio' => StremioAdapter(),
       'json' => JsonAdapter(),
-      _ => ArchiveAdapter(),
+      _ => JsonAdapter(),
     };
 
 Future<Item> detailOf(Item item) async {
@@ -110,130 +111,130 @@ Future<List<Source>> getSources(Item item, Episode? ep) async {
   return adapterFor(p).sources(p, item, ep);
 }
 
-/* ---------- Internet Archive (built in) ---------- */
+/* ---------- MovieBox built-in provider ---------- */
 
-class ArchiveAdapter extends Adapter {
-  static const List<List<String>> _shelves = [
-    ['Feature films', 'feature_films'],
-    ['Animation & cartoons', 'animationandcartoons'],
-    ['Classic TV', 'classic_tv'],
-    ['Silent films', 'silent_films'],
-  ];
+class MovieBoxAdapter extends Adapter {
+  static const _homeUrl = 'https://h5-api.aoneroom.com/wefeed-h5api-bff/home';
+  static const _headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    'Origin': 'https://movieboxph.org',
+    'Referer': 'https://movieboxph.org/',
+    'x-client-info': '{"timezone":"Asia/Calcutta"}',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Connection': 'close',
+  };
 
-  Future<List<Item>> _query(ProviderDef p, String? coll, String? q) async {
-    var qs = 'mediatype:(movies)';
-    if (coll != null) qs += ' AND collection:($coll)';
-    if (q != null) {
-      final c = q
-          .replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-      if (c.isNotEmpty) qs += ' AND ($c)';
+  Future<dynamic> _homeJson() async {
+    try {
+      final response = await http.get(Uri.parse(_homeUrl), headers: _headers)
+          .timeout(const Duration(seconds: 25));
+      if (response.statusCode != 200) {
+        throw ProviderError('MovieBox HTTP ${response.statusCode}');
+      }
+      final json = jsonDecode(utf8.decode(response.bodyBytes));
+      if (json is! Map || (json['code'] != 0 && json['message'] != 'success')) {
+        throw ProviderError('MovieBox returned an unexpected response.');
+      }
+      return json;
+    } on ProviderError {
+      rethrow;
+    } on TimeoutException {
+      throw ProviderError('MovieBox request timed out.');
+    } on FormatException {
+      throw ProviderError('MovieBox returned invalid JSON.');
+    } catch (_) {
+      throw ProviderError('Could not connect to MovieBox. The service may block this network.');
     }
-    final u = Uri.https('archive.org', '/advancedsearch.php', {
-      'q': qs,
-      'fl[]': ['identifier', 'title', 'year', 'description'],
-      'rows': '24',
-      'sort[]': 'downloads desc',
-      'output': 'json',
-    });
-    final j = await cachedJson(u.toString());
-    final docs = ((j['response']?['docs']) as List?) ?? [];
-    return docs.whereType<Map>().map((d) {
-      final id = d['identifier'].toString();
-      final title = strip(d['title']);
-      final plot = strip(d['description']);
-      return Item(
-        pid: p.id,
-        id: id,
-        title: title.isEmpty ? id : title,
-        year: d['year']?.toString(),
-        plot: plot.length > 500 ? plot.substring(0, 500) : plot,
-        poster: 'https://archive.org/services/img/$id',
-      );
-    }).toList();
   }
 
-  @override
-  Future<List<Shelf>> home(ProviderDef p) => shelvesFrom([
-        for (final s in _shelves)
-          MapEntry<String, Future<List<Item>>>(s[0], _query(p, s[1], null)),
-      ]);
+  String? _image(dynamic value) {
+    if (value is Map) return value['url']?.toString();
+    if (value is String && value.isNotEmpty) return value;
+    return null;
+  }
 
-  @override
-  Future<List<Item>> search(ProviderDef p, String q) => _query(p, null, q);
-
-  @override
-  Future<Item> detail(ProviderDef p, Item item) async {
-    final m = await cachedJson(
-        'https://archive.org/metadata/${Uri.encodeComponent(item.id)}');
-    final files = (m['files'] as List?) ?? [];
-    final ext = RegExp(r'\.(mp4|m4v|webm|ogv|mkv)$', caseSensitive: false);
-    final groups = <String, List<Map>>{};
-    for (final f in files.whereType<Map>()) {
-      final name = (f['name'] ?? '').toString();
-      if (!ext.hasMatch(name)) continue;
-      final key = f['source'] == 'derivative'
-          ? (f['original'] ?? name).toString()
-          : name;
-      groups.putIfAbsent(key, () => []).add(f);
-    }
-
-    String dl(String n) =>
-        'https://archive.org/download/${Uri.encodeComponent(item.id)}/${n.split('/').map(Uri.encodeComponent).join('/')}';
-
-    List<Source> mk(List<Map> arr) {
-      int size(Map f) => int.tryParse('${f['size']}') ?? 0;
-      final sorted = [...arr]..sort((a, b) => size(b).compareTo(size(a)));
-      return [
-        for (final f in sorted)
-          Source.clean(
-            name: [
-              (f['format'] ?? f['name'].toString().split('.').last.toUpperCase())
-                  .toString(),
-              if (size(f) > 0) '${(size(f) / 1048576).round()} MB',
-            ].join(' · '),
-            url: dl(f['name'].toString()),
-          ),
-      ];
-    }
-
-    final md = (m['metadata'] as Map?) ?? {};
-    final plot = strip(md['description']);
-    final date = md['date']?.toString();
-    final year = md['year']?.toString() ??
-        (date != null && date.length >= 4 ? date.substring(0, 4) : null);
-    final subject = md['subject'];
-    final genres = (subject is List ? subject : (subject == null ? [] : [subject]))
-        .map((e) => e.toString())
-        .take(3)
-        .toList();
-
-    final keys = groups.keys.toList()..sort((a, b) => _natKey(a).compareTo(_natKey(b)));
-    final base = item.copyWith(
-      plot: plot.isEmpty ? null : plot,
+  Item _item(ProviderDef p, Map raw, {bool banner = false}) {
+    final id = (raw['subjectId'] ?? raw['id'] ?? '').toString();
+    final typeCode = raw['subjectType'];
+    final type = typeCode == 2 ? 'series' : 'movie';
+    final image = banner
+        ? (_image(raw['image']) ?? _image(raw['subject'] is Map ? raw['subject']['cover'] : null))
+        : (_image(raw['cover']) ?? _image(raw['image']));
+    final year = (raw['releaseDate'] ?? raw['year'])?.toString();
+    final rating = (raw['score'] ?? raw['imdbRating'])?.toString();
+    return Item(
+      pid: p.id,
+      id: id,
+      type: type,
+      title: (raw['title'] ?? (raw['subject'] is Map ? raw['subject']['title'] : null) ?? 'Untitled').toString(),
+      poster: image,
+      bg: banner ? image : null,
       year: year,
-      genres: genres,
+      rating: rating,
+      plot: raw['description']?.toString(),
+      genres: (raw['genre'] is String
+          ? (raw['genre'] as String).split(',')
+          : (raw['genres'] is List ? (raw['genres'] as List).map((e) => e.toString()).toList() : const <String>[]))
+          .map((e) => e.trim()).where((e) => e.isNotEmpty).take(3).toList(),
+      detailPath: raw['detailPath']?.toString(),
     );
-    if (keys.length > 1) {
-      return base.copyWith(episodes: [
-        for (var i = 0; i < keys.length && i < 300; i++)
-          Episode(
-            id: keys[i],
-            season: 1,
-            episode: i + 1,
-            title: keys[i].replaceAll(RegExp(r'\.[^.]+$'), '').replaceAll('_', ' '),
-            sources: mk(groups[keys[i]]!),
-          ),
-      ]);
+  }
+
+  Future<List<Shelf>> _shelves(ProviderDef p) async {
+    final json = await _homeJson();
+    final data = json['data'];
+    final ops = data is Map ? (data['operatingList'] as List? ?? const []) : const [];
+    if (ops.isEmpty) throw ProviderError('MovieBox homepage has no content.');
+
+    final result = <Shelf>[];
+    final first = ops.first;
+    if (first is Map) {
+      final banner = first['banner'];
+      final bannerItems = banner is Map ? (banner['items'] as List? ?? const []) : const [];
+      final featured = bannerItems.whereType<Map>()
+          .map((b) => _item(p, b, banner: true))
+          .where((it) => it.id.isNotEmpty)
+          .toList();
+      if (featured.isNotEmpty) result.add(Shelf('Featured', featured));
     }
-    return base.copyWith(
-        sources: keys.isEmpty ? const [] : mk(groups[keys.first]!));
+
+    for (final op in ops.skip(1).whereType<Map>()) {
+      final rawItems = (op['subjects'] as List?) ?? (op['items'] as List?) ?? const [];
+      final items = rawItems.whereType<Map>()
+          .map((it) => _item(p, it))
+          .where((it) => it.id.isNotEmpty)
+          .toList();
+      final title = (op['title'] ?? '').toString().trim();
+      if (title.isNotEmpty && items.isNotEmpty) result.add(Shelf(title, items));
+    }
+    if (result.isEmpty) throw ProviderError('MovieBox returned no usable titles.');
+    return result;
   }
 
   @override
-  Future<List<Source>> sources(ProviderDef p, Item item, Episode? ep) async =>
-      ep != null ? ep.sources : item.sources;
+  Future<List<Shelf>> home(ProviderDef p) => _shelves(p);
+
+  @override
+  Future<List<Item>> search(ProviderDef p, String query) async {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    final shelves = await _shelves(p);
+    final seen = <String>{};
+    return [
+      for (final shelf in shelves)
+        for (final item in shelf.items)
+          if (item.title.toLowerCase().contains(q) && seen.add(item.id)) item,
+    ];
+  }
+
+  @override
+  Future<Item> detail(ProviderDef p, Item item) async => item;
+
+  @override
+  Future<List<Source>> sources(ProviderDef p, Item item, Episode? ep) async {
+    throw ProviderError('MovieBox catalog is connected, but its detail/stream API was not included. Playback is not available yet.');
+  }
 }
 
 /* ---------- Stremio-compatible addons ---------- */
@@ -563,15 +564,15 @@ const String sampleCatalog = '''{
   "items": [
     {
       "id": "bbb", "type": "movie", "title": "Big Buck Bunny", "year": 2008,
-      "poster": "https://archive.org/services/img/BigBuckBunny_124",
+      "poster": "https://images.unsplash.com/photo-1489599849927-2ee91d4b7f4e",
       "plot": "A giant rabbit takes revenge on three bullying rodents.",
-      "sources": [{ "name": "720p", "url": "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4" }]
+      "sources": [{ "name": "720p", "url": "https://example.com/video.mp4" }]
     },
     {
       "id": "sintel", "type": "movie", "title": "Sintel", "year": 2010,
-      "poster": "https://archive.org/services/img/Sintel",
+      "poster": "https://images.unsplash.com/photo-1440404653325-ab127d49abc1",
       "plot": "A young woman searches for a baby dragon she once befriended.",
-      "sources": [{ "name": "MP4", "url": "https://archive.org/download/Sintel/sintel-2048-surround.mp4" }]
+      "sources": [{ "name": "MP4", "url": "https://example.com/video.mp4" }]
     }
   ]
 }''';
