@@ -120,9 +120,6 @@ class ShelfRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final w = cardWidth(context);
-    if (shelf.title == 'Featured') {
-      return _FeaturedShelf(shelf: shelf);
-    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: Column(
@@ -154,88 +151,6 @@ class ShelfRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FeaturedShelf extends StatelessWidget {
-  const _FeaturedShelf({required this.shelf});
-  final Shelf shelf;
-
-  @override
-  Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final height = width >= 700 ? 300.0 : 218.0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
-      child: SizedBox(
-        height: height,
-        child: PageView.builder(
-          controller: PageController(viewportFraction: width >= 700 ? .88 : .92),
-          itemCount: shelf.items.length,
-          itemBuilder: (context, index) {
-            final item = shelf.items[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => openDetail(context, item),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (isHttp(item.bg ?? item.poster))
-                        CachedNetworkImage(
-                          imageUrl: item.bg ?? item.poster!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => const ColoredBox(color: Colors.black),
-                        )
-                      else
-                        const ColoredBox(color: Colors.black),
-                      const DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.center,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black87],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 18,
-                        right: 18,
-                        bottom: 18,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('FEATURED',
-                                style: TextStyle(color: Colors.white70, fontSize: 11,
-                                    fontWeight: FontWeight.w800, letterSpacing: 1.4)),
-                            const SizedBox(height: 6),
-                            Text(item.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white,
-                                    fontSize: 22, fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 10),
-                            FilledButton.tonalIcon(
-                              onPressed: () => openDetail(context, item),
-                              icon: const Icon(Icons.play_arrow_rounded),
-                              label: const Text('Explore'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
       ),
     );
   }
