@@ -40,6 +40,7 @@ class Episode {
     this.episode = 0,
     required this.title,
     this.sources = const [],
+    this.detailPath,
   });
 
   final String id;
@@ -89,6 +90,7 @@ class Item {
   final List<String> genres;
   final List<Episode> episodes;
   final List<Source> sources;
+  final String? detailPath;
 
   String get key => '$pid|$id';
 
@@ -102,6 +104,7 @@ class Item {
     List<String>? genres,
     List<Episode>? episodes,
     List<Source>? sources,
+    String? detailPath,
   }) =>
       Item(
         pid: pid,
@@ -116,6 +119,7 @@ class Item {
         genres: genres ?? this.genres,
         episodes: episodes ?? this.episodes,
         sources: sources ?? this.sources,
+        detailPath: detailPath ?? this.detailPath,
       );
 
   Map<String, dynamic> toJson() => {
@@ -126,6 +130,7 @@ class Item {
         'poster': poster,
         'year': year,
         'plot': (plot ?? '').length > 400 ? plot!.substring(0, 400) : plot,
+        'detailPath': detailPath,
       };
 
   factory Item.fromJson(Map<String, dynamic> j) => Item(
@@ -136,6 +141,7 @@ class Item {
         poster: j['poster']?.toString(),
         year: j['year']?.toString(),
         plot: j['plot']?.toString(),
+        detailPath: j['detailPath']?.toString(),
       );
 }
 
@@ -191,7 +197,7 @@ class ProviderDef {
   });
 
   final String id;
-  final String kind; // archive | stremio | json
+  final String kind; // moviebox | stremio | json
   final String name;
   final bool enabled;
   final bool builtin;
@@ -199,8 +205,8 @@ class ProviderDef {
   final Map<String, dynamic>? data;
   final Map<String, dynamic>? manifest;
 
-  factory ProviderDef.archive() => const ProviderDef(
-      id: 'archive', kind: 'archive', name: 'Internet Archive', builtin: true);
+  factory ProviderDef.moviebox() => const ProviderDef(
+      id: 'moviebox', kind: 'moviebox', name: 'MovieBox', builtin: true);
 
   ProviderDef copyWith({bool? enabled}) => ProviderDef(
         id: id,
@@ -214,7 +220,7 @@ class ProviderDef {
       );
 
   String get kindLabel => switch (kind) {
-        'archive' => 'Built-in',
+        'moviebox' => 'Built-in',
         'stremio' => 'Stremio addon',
         'json' => 'JSON catalog',
         _ => kind,
