@@ -64,6 +64,12 @@ class _PlayerPageState extends State<PlayerPage> {
     return i >= 0 && i + 1 < _episodes.length ? _episodes[i + 1] : null;
   }
 
+  Episode? get _previous {
+    if (_ep == null) return null;
+    final i = _episodes.indexWhere((e) => e.id == _ep!.id);
+    return i > 0 ? _episodes[i - 1] : null;
+  }
+
   /* ---- sources ---- */
 
   Future<void> _setup() async {
@@ -228,6 +234,15 @@ class _PlayerPageState extends State<PlayerPage> {
     _saveNow();
     _player?.pause();
     setState(() => _ep = n);
+    _setup();
+  }
+
+  void _playPrevious() {
+    final previous = _previous;
+    if (previous == null) return;
+    _saveNow();
+    _player?.pause();
+    setState(() => _ep = previous);
     _setup();
   }
 
@@ -522,12 +537,23 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Widget _centerRow(BuildContext context) {
-    final gap = MediaQuery.sizeOf(context).width * 0.13;
+    final gap = MediaQuery.sizeOf(context).width * 0.08;
+    final previous = _previous;
+    final next = _next;
+    final hasEpisodeNavigation = _episodes.length > 1 && _ep != null;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (hasEpisodeNavigation)
+          IconButton(
+            color: previous == null ? Colors.white24 : Colors.white70,
+            iconSize: 42,
+            icon: const Icon(Icons.skip_previous_rounded),
+            tooltip: 'Previous episode',
+            onPressed: previous == null ? null : _playPrevious,
+          ),
         IconButton(
-          color: Colors.white70, iconSize: 54, icon: const Icon(Icons.replay_10),
+          color: Colors.white70, iconSize: 50, icon: const Icon(Icons.replay_10),
           tooltip: 'Back 10 seconds', onPressed: () => _skip(-10),
         ),
         SizedBox(width: gap),
@@ -549,9 +575,17 @@ class _PlayerPageState extends State<PlayerPage> {
           ),
         SizedBox(width: gap),
         IconButton(
-          color: Colors.white70, iconSize: 54, icon: const Icon(Icons.forward_10),
+          color: Colors.white70, iconSize: 50, icon: const Icon(Icons.forward_10),
           tooltip: 'Forward 10 seconds', onPressed: () => _skip(10),
         ),
+        if (hasEpisodeNavigation)
+          IconButton(
+            color: next == null ? Colors.white24 : Colors.white70,
+            iconSize: 42,
+            icon: const Icon(Icons.skip_next_rounded),
+            tooltip: 'Next episode',
+            onPressed: next == null ? null : _playNext,
+          ),
       ],
     );
   }
