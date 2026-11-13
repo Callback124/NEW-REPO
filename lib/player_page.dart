@@ -148,7 +148,7 @@ class _PlayerPageState extends State<PlayerPage> {
       _showPickInMsg = false;
       _ended = false;
     });
-    await _player.open(Media(s.url!));
+    await _player.open(Media(s.url!, httpHeaders: s.headers));
     await _player.setRate(_rate);
   }
 
