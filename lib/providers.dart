@@ -284,7 +284,7 @@ class MovieBoxAdapter extends Adapter {
 
   Item _item(ProviderDef p, Map raw) {
     final subject = raw['subject'] is Map ? raw['subject'] as Map : raw;
-    final code = (subject['subjectType'] as num?)?.toInt() ?? 1;
+    final code = int.tryParse(subject['subjectType']?.toString() ?? '') ?? 1;
     final date = subject['releaseDate']?.toString() ?? '';
     final genre = subject['genre'];
     return Item(
