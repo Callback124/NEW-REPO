@@ -311,7 +311,8 @@ class _DownloadPageState extends State<DownloadPage> {
             ),
             itemBuilder: (context, i) {
               final ep = episodes[i];
-              final match = choices.where((c) => c.episode?.id == ep.id).firstOrNull;
+              final matching = choices.where((c) => c.episode?.id == ep.id).toList();
+              final match = matching.isEmpty ? null : matching.first;
               final available = match != null;
               final selected = _selected.contains(ep.id);
               return Card(
