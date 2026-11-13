@@ -41,7 +41,6 @@ class _PlayerPageState extends State<PlayerPage> {
   Timer? _hideTimer;
   double _rate = 1.0;
   int _fitI = 0;
-  List<VideoAudioTrack> _audioTracks = const [];
   static const List<(BoxFit, String)> _fits = [
     (BoxFit.contain, 'Fit'),
     (BoxFit.cover, 'Cover'),
@@ -126,6 +125,7 @@ class _PlayerPageState extends State<PlayerPage> {
       final d = value.duration.inSeconds.toDouble();
       if (d > 0) app.setProgress(_item, _ep, d, d);
       setState(() => _ended = true);
+      if (_next != null) _playNext();
     } else {
       setState(() {
         if (value.isPlaying) _msg = null;
@@ -185,7 +185,6 @@ class _PlayerPageState extends State<PlayerPage> {
         _buffering = false;
       });
       await controller.play();
-      try { _audioTracks = await controller.getAudioTracks(); } catch (_) { _audioTracks = const []; }
       if (mounted) setState(() {});
     } catch (e) {
       if (!mounted) return;
@@ -316,7 +315,6 @@ class _PlayerPageState extends State<PlayerPage> {
       _msg = 'Loading ${dub.language}…';
       _srcs = const [];
       _cur = null;
-      _audioTracks = const [];
     });
     try {
       final fresh = await detailOf(current);
@@ -339,47 +337,19 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
-  void _pickAudio() async {
-    final controller = _player;
-    if (controller == null) return;
-    try { _audioTracks = await controller.getAudioTracks(); } catch (_) {}
-    if (!mounted) return;
-    _sheet('Audio / Language', [
-      if (_item.dubs.length > 1) ...[
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('MovieBox languages', style: TextStyle(fontWeight: FontWeight.w700)),
-        ),
-        for (final dub in _item.dubs)
-          ListTile(
-            leading: const Icon(Icons.language),
-            title: Text(dub.language + (dub.original ? ' · Original' : '')),
-            trailing: dub.subjectId == _item.id && dub.detailPath == _item.detailPath
-                ? const Icon(Icons.check, color: Colors.green)
-                : null,
-            onTap: () {
-              Navigator.pop(context);
-              _switchDub(dub);
-            },
-          ),
-      ],
-      if (_audioTracks.isNotEmpty) ...[
-        const Divider(),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('Embedded audio tracks', style: TextStyle(fontWeight: FontWeight.w700)),
-        ),
-      ],
-      if (_audioTracks.isEmpty && _item.dubs.length <= 1)
-        const ListTile(title: Text('No alternate audio tracks in this stream')),
-      for (final track in _audioTracks)
+  void _pickAudio() {
+    _sheet('Audio', [
+      if (_item.dubs.isEmpty)
+        const ListTile(title: Text('No alternate languages available')),
+      for (final dub in _item.dubs)
         ListTile(
-          title: Text(track.label?.isNotEmpty == true
-              ? track.label! : (track.language?.isNotEmpty == true ? track.language! : 'Audio track')),
-          trailing: track.isSelected ? const Icon(Icons.check) : null,
-          onTap: () async {
-            await controller.selectAudioTrack(track.id);
-            if (mounted) Navigator.pop(context);
+          title: Text(dub.language + (dub.original ? ' · Original' : '')),
+          trailing: dub.subjectId == _item.id && dub.detailPath == _item.detailPath
+              ? const Icon(Icons.check, color: Colors.green)
+              : null,
+          onTap: () {
+            Navigator.pop(context);
+            _switchDub(dub);
           },
         ),
     ]);
@@ -472,7 +442,11 @@ class _PlayerPageState extends State<PlayerPage> {
             child: AnimatedOpacity(
               opacity: showUi ? 1 : 0,
               duration: const Duration(milliseconds: 200),
-              child: _controls(context, msgOn, next),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleUi,
+                child: _controls(context, msgOn, next),
+              ),
             ),
           ),
         ],
@@ -626,25 +600,39 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Widget _opt(IconData icon, String label, VoidCallback onTap) {
+    final portrait = MediaQuery.sizeOf(context).height > MediaQuery.sizeOf(context).width;
     return Expanded(
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 22, color: Colors.white),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 14)),
-              ),
-            ],
-          ),
+          child: portrait
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 22, color: Colors.white),
+                    const SizedBox(height: 4),
+                    Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 22, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 14)),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -655,12 +643,7 @@ class _PlayerPageState extends State<PlayerPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_ended && next != null) ...[
-            Text('Up next: ${next.title}',
-                textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
-            const SizedBox(height: 12),
-            FilledButton(onPressed: _playNext, child: const Text('Play next episode')),
-          ] else if (_msg != null) ...[
+          if (_msg != null) ...[
             Text(_msg!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
             if (_showPickInMsg) ...[
               const SizedBox(height: 12),
