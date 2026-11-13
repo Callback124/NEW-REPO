@@ -34,6 +34,34 @@ jobs:
           sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application android:usesCleartextTraffic="true"#' "$MANIFEST"
           grep -n "INTERNET\|usesCleartextTraffic" "$MANIFEST"
 
+      # The Android lint tool crashes inside plugin modules. Lint is not needed to produce an APK.
+      - name: Skip lintVital tasks
+        run: |
+          if [ -f android/build.gradle.kts ]; then
+            cat >> android/build.gradle.kts <<'EOF'
+
+          subprojects {
+              tasks.configureEach {
+                  if (name.startsWith("lintVital")) {
+                      enabled = false
+                  }
+              }
+          }
+          EOF
+          else
+            cat >> android/build.gradle <<'EOF'
+
+          subprojects {
+              tasks.configureEach { task ->
+                  if (task.name.startsWith("lintVital")) {
+                      task.enabled = false
+                  }
+              }
+          }
+          EOF
+          fi
+          tail -12 android/build.gradle*
+
       - run: flutter pub get
 
       - run: flutter build apk --release
