@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'models.dart';
@@ -24,8 +23,7 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
-  final Player _player = Player();
-  late final VideoController _video = VideoController(_player);
+  VideoPlayerController? _player;
   final List<StreamSubscription<dynamic>> _subs = [];
 
   late Episode? _ep = widget.ep;
@@ -42,12 +40,24 @@ class _PlayerPageState extends State<PlayerPage> {
   Timer? _hideTimer;
   double _rate = 1.0;
   int _fitI = 0;
+  List<VideoAudioTrack> _audioTracks = const [];
   static const List<(BoxFit, String)> _fits = [
     (BoxFit.contain, 'Fit'),
     (BoxFit.cover, 'Cover'),
     (BoxFit.fill, 'Stretch'),
   ];
   static const List<double> _rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    _setup();
+  }
 
   Episode? get _next {
     if (_ep == null) return null;
@@ -118,7 +128,7 @@ class _PlayerPageState extends State<PlayerPage> {
       _srcs = l;
       final ok = l.where((s) => s.playable).toList();
       if (l.isEmpty) {
-        setState(() => _msg = 'No sources were found for this title.');
+        setState(() => _msg = 'No sources were returned by MovieBox for this episode.');
       } else if (ok.isEmpty) {
         setState(() {
           _msg = 'None of these sources can play in the app.';
@@ -138,6 +148,44 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
+  void _onPlayerChanged() {
+    final controller = _player;
+    if (!mounted || controller == null || !controller.value.isInitialized) return;
+    final value = controller.value;
+    if (_startAt != null && value.duration > Duration.zero) {
+      final seek = _startAt!;
+      _startAt = null;
+      controller.seekTo(seek);
+    }
+    final now = DateTime.now();
+    if (value.duration.inSeconds > 0 && value.position.inSeconds > 1 &&
+        now.difference(_lastSave).inSeconds >= 5) {
+      _lastSave = now;
+      app.setProgress(widget.item, _ep, value.position.inSeconds.toDouble(),
+          value.duration.inSeconds.toDouble());
+    }
+    if (value.hasError) {
+      setState(() {
+        _msg = value.errorDescription ?? 'This source could not be played. Try another one.';
+        _showPickInMsg = true;
+      });
+      return;
+    }
+    if (value.isCompleted && !_ended) {
+      final d = value.duration.inSeconds.toDouble();
+      if (d > 0) app.setProgress(widget.item, _ep, d, d);
+      setState(() => _ended = true);
+    } else {
+      setState(() {
+        if (value.isPlaying) _msg = null;
+        _buffering = value.isBuffering;
+      });
+      if (value.isPlaying) _kick();
+    }
+  }
+
+  bool _buffering = false;
+
   Future<void> _load(Source s) async {
     final pr = app.progress[progressKey(widget.item, _ep)];
     final resume = pr != null && pr.t > 5 && pr.d - pr.t > 10;
@@ -147,9 +195,42 @@ class _PlayerPageState extends State<PlayerPage> {
       _msg = 'Loading…';
       _showPickInMsg = false;
       _ended = false;
+      _buffering = true;
     });
-    await _player.open(Media(s.url!, httpHeaders: s.headers));
-    await _player.setRate(_rate);
+    final old = _player;
+    old?.removeListener(_onPlayerChanged);
+    if (old != null) await old.dispose();
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(s.url!),
+      httpHeaders: s.headers,
+      videoPlayerOptions: VideoPlayerOptions(),
+    );
+    _player = controller;
+    try {
+      await controller.initialize();
+      if (!mounted || _player != controller) return;
+      await controller.setLooping(false);
+      await controller.setPlaybackSpeed(_rate);
+      if (_startAt != null) {
+        await controller.seekTo(_startAt!);
+        _startAt = null;
+      }
+      controller.addListener(_onPlayerChanged);
+      setState(() {
+        _msg = null;
+        _buffering = false;
+      });
+      await controller.play();
+      try { _audioTracks = await controller.getAudioTracks(); } catch (_) { _audioTracks = const []; }
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _msg = 'Player error: $e';
+        _showPickInMsg = true;
+        _buffering = false;
+      });
+    }
   }
 
   void _pickSource() {
@@ -179,14 +260,16 @@ class _PlayerPageState extends State<PlayerPage> {
     final n = _next;
     if (n == null) return;
     _saveNow();
-    _player.stop();
+    _player?.pause();
     setState(() => _ep = n);
     _setup();
   }
 
   void _saveNow() {
-    final d = _player.state.duration.inSeconds.toDouble();
-    final t = _player.state.position.inSeconds.toDouble();
+    final value = _player?.value;
+    if (value == null || !value.isInitialized) return;
+    final d = value.duration.inSeconds.toDouble();
+    final t = value.position.inSeconds.toDouble();
     if (d > 0 && t > 1) app.setProgress(widget.item, _ep, t, d);
   }
 
@@ -213,9 +296,11 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   void _skip(int seconds) {
-    final p = _player.state.position + Duration(seconds: seconds);
-    final d = _player.state.duration;
-    _player.seek(p < Duration.zero ? Duration.zero : (p > d ? d : p));
+    final controller = _player;
+    if (controller == null || !controller.value.isInitialized) return;
+    final p = controller.value.position + Duration(seconds: seconds);
+    final d = controller.value.duration;
+    controller.seekTo(p < Duration.zero ? Duration.zero : (p > d ? d : p));
     _kick();
   }
 
@@ -242,46 +327,30 @@ class _PlayerPageState extends State<PlayerPage> {
     ).whenComplete(_kick);
   }
 
-  String _trackName(String id, String? title, String? language, String fallback) {
-    if (id == 'auto') return 'Auto';
-    if (id == 'no') return fallback;
-    final t = (title ?? '').trim();
-    if (t.isNotEmpty) return t;
-    final l = (language ?? '').trim();
-    return l.isNotEmpty ? l.toUpperCase() : 'Track $id';
-  }
-
-  String _short(String name) => name.length > 4 ? name.substring(0, 2).toUpperCase() : name;
-
-  void _pickAudio() {
-    final sel = _player.state.track.audio;
-    final tracks = _player.state.tracks.audio;
+  void _pickAudio() async {
+    final controller = _player;
+    if (controller == null) return;
+    try { _audioTracks = await controller.getAudioTracks(); } catch (_) {}
+    if (!mounted) return;
     _sheet('Audio', [
-      for (final t in tracks)
+      if (_audioTracks.isEmpty)
+        const ListTile(title: Text('No alternate audio tracks in this stream')),
+      for (final track in _audioTracks)
         ListTile(
-          title: Text(_trackName(t.id, t.title, t.language, 'Off')),
-          trailing: t.id == sel.id ? const Icon(Icons.check) : null,
-          onTap: () {
-            _player.setAudioTrack(t);
-            Navigator.pop(context);
+          title: Text(track.label?.isNotEmpty == true
+              ? track.label! : (track.language?.isNotEmpty == true ? track.language! : 'Audio track')),
+          trailing: track.isSelected ? const Icon(Icons.check) : null,
+          onTap: () async {
+            await controller.selectAudioTrack(track.id);
+            if (mounted) Navigator.pop(context);
           },
         ),
     ]);
   }
 
   void _pickSubtitle() {
-    final sel = _player.state.track.subtitle;
-    final tracks = _player.state.tracks.subtitle;
-    _sheet('Subtitles', [
-      for (final t in tracks)
-        ListTile(
-          title: Text(_trackName(t.id, t.title, t.language, 'None')),
-          trailing: t.id == sel.id ? const Icon(Icons.check) : null,
-          onTap: () {
-            _player.setSubtitleTrack(t);
-            Navigator.pop(context);
-          },
-        ),
+    _sheet('Subtitles', const [
+      ListTile(title: Text('No embedded subtitle tracks are exposed by this stream.')),
     ]);
   }
 
@@ -292,7 +361,7 @@ class _PlayerPageState extends State<PlayerPage> {
           title: Text('${r}x'),
           trailing: r == _rate ? const Icon(Icons.check) : null,
           onTap: () {
-            _player.setRate(r);
+            _player?.setPlaybackSpeed(r);
             setState(() => _rate = r);
             Navigator.pop(context);
           },
@@ -317,10 +386,11 @@ class _PlayerPageState extends State<PlayerPage> {
     _hideTimer?.cancel();
     _saveNow();
     app.progressRev.value++;
-    for (final s in _subs) {
-      s.cancel();
+    _player?.removeListener(_onPlayerChanged);
+    final controller = _player;
+    if (controller != null) {
+      unawaited(controller.dispose());
     }
-    _player.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -338,7 +408,19 @@ class _PlayerPageState extends State<PlayerPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Video(controller: _video, fit: _fits[_fitI].$1, controls: NoVideoControls),
+          if (_player != null && _player!.value.isInitialized)
+            Center(
+              child: FittedBox(
+                fit: _fits[_fitI].$1,
+                child: SizedBox(
+                  width: _player!.value.size.width,
+                  height: _player!.value.size.height,
+                  child: VideoPlayer(_player!),
+                ),
+              ),
+            )
+          else
+            const ColoredBox(color: Colors.black),
           GestureDetector(behavior: HitTestBehavior.opaque, onTap: _toggleUi),
           IgnorePointer(
             ignoring: !showUi,
@@ -422,50 +504,30 @@ class _PlayerPageState extends State<PlayerPage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          color: Colors.white70,
-          iconSize: 54,
-          icon: const Icon(Icons.replay_10),
-          tooltip: 'Back 10 seconds',
-          onPressed: () => _skip(-10),
+          color: Colors.white70, iconSize: 54, icon: const Icon(Icons.replay_10),
+          tooltip: 'Back 10 seconds', onPressed: () => _skip(-10),
         ),
         SizedBox(width: gap),
-        StreamBuilder<bool>(
-          stream: _player.stream.buffering,
-          initialData: _player.state.buffering,
-          builder: (context, buf) {
-            if (buf.data == true) {
-              return const SizedBox(
-                width: 68,
-                height: 68,
-                child: Padding(
-                  padding: EdgeInsets.all(18),
-                  child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
-                ),
-              );
-            }
-            return StreamBuilder<bool>(
-              stream: _player.stream.playing,
-              initialData: _player.state.playing,
-              builder: (context, snap) {
-                final playing = snap.data ?? false;
-                return IconButton(
-                  color: Colors.white,
-                  iconSize: 68,
-                  icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                  tooltip: playing ? 'Pause' : 'Play',
-                  onPressed: () => _player.playOrPause(),
-                );
-              },
-            );
-          },
-        ),
+        if (_buffering)
+          const SizedBox(width: 68, height: 68,
+              child: Padding(padding: EdgeInsets.all(18),
+                  child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white)))
+        else
+          IconButton(
+            color: Colors.white, iconSize: 68,
+            icon: Icon((_player?.value.isPlaying ?? false)
+                ? Icons.pause_rounded : Icons.play_arrow_rounded),
+            tooltip: (_player?.value.isPlaying ?? false) ? 'Pause' : 'Play',
+            onPressed: () {
+              final c = _player;
+              if (c == null) return;
+              c.value.isPlaying ? c.pause() : c.play();
+            },
+          ),
         SizedBox(width: gap),
         IconButton(
-          color: Colors.white70,
-          iconSize: 54,
-          icon: const Icon(Icons.forward_10),
-          tooltip: 'Forward 10 seconds',
-          onPressed: () => _skip(10),
+          color: Colors.white70, iconSize: 54, icon: const Icon(Icons.forward_10),
+          tooltip: 'Forward 10 seconds', onPressed: () => _skip(10),
         ),
       ],
     );
@@ -475,36 +537,24 @@ class _PlayerPageState extends State<PlayerPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        StreamBuilder<Duration>(
-          stream: _player.stream.position,
-          initialData: _player.state.position,
-          builder: (context, snap) {
-            final pos = snap.data ?? Duration.zero;
-            final dur = _player.state.duration;
+        AnimatedBuilder(
+          animation: _player ?? ValueNotifier(false),
+          builder: (context, _) {
+            final value = _player?.value;
+            final pos = value?.position ?? Duration.zero;
+            final dur = value?.duration ?? Duration.zero;
+            final buffer = value?.buffered.isNotEmpty == true
+                ? value!.buffered.last.end : Duration.zero;
             return Row(
               children: [
-                SizedBox(
-                  width: 50,
-                  child: Text(_fmt(pos),
-                      style: const TextStyle(color: Colors.white, fontSize: 13)),
-                ),
-                Expanded(
-                  child: _SeekBar(
-                    position: pos,
-                    duration: dur,
-                    buffer: _player.state.buffer,
-                    onSeek: (d) {
-                      _player.seek(d);
-                      _kick();
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: 56,
-                  child: Text(_fmt(dur),
-                      textAlign: TextAlign.end,
-                      style: const TextStyle(color: Colors.white, fontSize: 13)),
-                ),
+                SizedBox(width: 50, child: Text(_fmt(pos),
+                    style: const TextStyle(color: Colors.white, fontSize: 13))),
+                Expanded(child: _SeekBar(
+                  position: pos, duration: dur, buffer: buffer,
+                  onSeek: (d) { _player?.seekTo(d); _kick(); },
+                )),
+                SizedBox(width: 56, child: Text(_fmt(dur), textAlign: TextAlign.end,
+                    style: const TextStyle(color: Colors.white, fontSize: 13))),
               ],
             );
           },
@@ -512,11 +562,8 @@ class _PlayerPageState extends State<PlayerPage> {
         const SizedBox(height: 2),
         Row(
           children: [
-            _opt(Icons.graphic_eq, _short(_trackName(_player.state.track.audio.id,
-                _player.state.track.audio.title, _player.state.track.audio.language, 'Off')), _pickAudio),
-            _opt(Icons.subtitles_outlined, _trackName(_player.state.track.subtitle.id,
-                _player.state.track.subtitle.title, _player.state.track.subtitle.language, 'None'),
-                _pickSubtitle),
+            _opt(Icons.graphic_eq, 'Audio', _pickAudio),
+            _opt(Icons.subtitles_outlined, 'Subtitles', _pickSubtitle),
             _opt(Icons.speed, _rate.toStringAsFixed(_rate == _rate.roundToDouble() ? 1 : 2), _pickSpeed),
             _opt(Icons.picture_in_picture_alt_outlined, 'PIP',
                 () => toast(context, 'Picture-in-picture is coming soon')),
