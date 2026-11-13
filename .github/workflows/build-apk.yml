@@ -33,9 +33,10 @@ jobs:
           import re
           p = Path("android/app/src/main/res/values/styles.xml")
           s = p.read_text()
-          s = re.sub(r'(<style name="(?:LaunchTheme|NormalTheme)"[^>]*>)',
-                     r'\1\\n        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>',
-                     s)
+          s = re.sub(
+              r'(<style name="(?:LaunchTheme|NormalTheme)"[^>]*>)',
+              lambda m: m.group(1) + "\\n        <item name=\"android:windowLayoutInDisplayCutoutMode\">shortEdges</item>",
+              s)
           p.write_text(s)
           PY
 
