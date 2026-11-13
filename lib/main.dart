@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
 
 import 'bubble_nav_bar.dart';
 import 'home_page.dart';
@@ -10,7 +9,6 @@ import 'store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized();
   await app.init();
   runApp(const StratusApp());
 }
