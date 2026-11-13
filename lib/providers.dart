@@ -126,26 +126,30 @@ class MovieBoxAdapter extends Adapter {
   };
 
   Future<dynamic> _homeJson() async {
-    try {
-      final response = await http.get(Uri.parse(_homeUrl), headers: _headers)
-          .timeout(const Duration(seconds: 25));
-      if (response.statusCode != 200) {
-        throw ProviderError('MovieBox HTTP ${response.statusCode}');
+    Object? lastError;
+    for (final endpoint in [
+      _homeUrl,
+      'https://movieboxph.org/wefeed-h5api-bff/home',
+    ]) {
+      try {
+        final response = await http.get(Uri.parse(endpoint), headers: _headers)
+            .timeout(const Duration(seconds: 25));
+        if (response.statusCode != 200) {
+          throw ProviderError('MovieBox HTTP ${response.statusCode}');
+        }
+        final json = jsonDecode(utf8.decode(response.bodyBytes));
+        if (json is! Map || (json['code'] != 0 && json['code'] != '0' && json['message'] != 'success')) {
+          throw ProviderError('MovieBox returned an unexpected response.');
+        }
+        return json;
+      } catch (e) {
+        lastError = e;
       }
-      final json = jsonDecode(utf8.decode(response.bodyBytes));
-      if (json is! Map || (json['code'] != 0 && json['code'] != '0' && json['message'] != 'success')) {
-        throw ProviderError('MovieBox returned an unexpected response.');
-      }
-      return json;
-    } on ProviderError {
-      rethrow;
-    } on TimeoutException {
-      throw ProviderError('MovieBox request timed out.');
-    } on FormatException {
-      throw ProviderError('MovieBox returned invalid JSON.');
-    } catch (_) {
-      throw ProviderError('Could not connect to MovieBox. The service may block this network.');
     }
+    if (lastError is ProviderError) throw lastError;
+    if (lastError is TimeoutException) throw ProviderError('MovieBox request timed out.');
+    if (lastError is FormatException) throw ProviderError('MovieBox returned invalid JSON.');
+    throw ProviderError('Could not connect to MovieBox. Both homepage endpoints failed.');
   }
 
   String? _image(dynamic value) {
