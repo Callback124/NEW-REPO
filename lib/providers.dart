@@ -200,16 +200,19 @@ class MovieBoxAdapter extends Adapter {
 
   Future<http.Response> _request(String path, {
     String method = 'GET', Map<String, String>? query,
-    Map<String, dynamic>? body, bool retry = true,
+    Map<String, dynamic>? body, bool retry = true, String? referer,
   }) async {
     final uri = Uri.parse(_base + '/' + path).replace(queryParameters: query);
     final token = await _getToken();
+    final isSearchEndpoint = path == 'subject/search' && method == 'POST';
     final headers = _headers()
       ..addAll({
         'Authorization': 'Bearer ' + token,
         'Cookie': 'token=' + token + '; moviebox_web_tk=' + token + '; NEXT_LOCALE=en',
-        'x-client-token': _clientToken(),
       });
+    if (referer != null && referer.isNotEmpty) headers['Referer'] = referer;
+    // MovieBox rejects x-client-token on POST /subject/search.
+    if (!isSearchEndpoint) headers['x-client-token'] = _clientToken();
     final request = http.Request(method, uri)..headers.addAll(headers);
     if (method == 'POST') {
       request.headers['Content-Type'] = 'application/json; charset=utf-8';
@@ -220,6 +223,7 @@ class MovieBoxAdapter extends Adapter {
       final streamed = await _client.send(request).timeout(const Duration(seconds: 25));
       response = await http.Response.fromStream(streamed);
     } catch (_) {
+      if (isSearchEndpoint) rethrow;
       final fallbackUri = Uri.parse(_web + '/wefeed-h5api-bff/' + path)
           .replace(queryParameters: query);
       final fallbackRequest = http.Request(method, fallbackUri)..headers.addAll(headers);
@@ -230,7 +234,8 @@ class MovieBoxAdapter extends Adapter {
       final fallbackStream = await _client.send(fallbackRequest).timeout(const Duration(seconds: 25));
       response = await http.Response.fromStream(fallbackStream);
     }
-    if (response.statusCode == 400 || response.statusCode == 403 || response.statusCode >= 500) {
+    if (!isSearchEndpoint &&
+        (response.statusCode == 400 || response.statusCode == 403 || response.statusCode >= 500)) {
       final fallbackUri = Uri.parse(_web + '/wefeed-h5api-bff/' + path)
           .replace(queryParameters: query);
       final fallbackRequest = http.Request(method, fallbackUri)..headers.addAll(headers);
@@ -247,7 +252,7 @@ class MovieBoxAdapter extends Adapter {
         responseText.toLowerCase().contains('token expired');
     if (invalid && retry) {
       await _getToken(force: true);
-      return _request(path, method: method, query: query, body: body, retry: false);
+      return _request(path, method: method, query: query, body: body, retry: false, referer: referer);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ProviderError('MovieBox HTTP ' + response.statusCode.toString() +
@@ -263,7 +268,7 @@ class MovieBoxAdapter extends Adapter {
       final reason = (decoded['message'] ?? decoded['reason'] ?? decoded['code']).toString();
       if (retry && reason.toLowerCase().contains('token')) {
         await _getToken(force: true);
-        return _request(path, method: method, query: query, body: body, retry: false);
+        return _request(path, method: method, query: query, body: body, retry: false, referer: referer);
       }
       throw ProviderError('MovieBox API error (' + decoded['code'].toString() + '): ' + reason + '\n' + responseText);
     }
@@ -271,8 +276,8 @@ class MovieBoxAdapter extends Adapter {
   }
 
   Future<dynamic> _json(String path, {String method = 'GET',
-      Map<String, String>? query, Map<String, dynamic>? body}) async {
-    final response = await _request(path, method: method, query: query, body: body);
+      Map<String, String>? query, Map<String, dynamic>? body, String? referer}) async {
+    final response = await _request(path, method: method, query: query, body: body, referer: referer);
     return jsonDecode(utf8.decode(response.bodyBytes));
   }
 
@@ -356,22 +361,10 @@ class MovieBoxAdapter extends Adapter {
   Future<List<Item>> search(ProviderDef p, String query) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
-    dynamic json;
-    Object? firstError;
-    // Current API: POST /subject/search with perPage. Older MovieBox mirrors
-    // expose GET /search with pageSize; try it only if the current endpoint rejects.
-    try {
-      json = await _json('subject/search', method: 'POST',
-          body: {'keyword': q, 'page': 1, 'perPage': 30});
-    } catch (e) {
-      firstError = e;
-      try {
-        json = await _json('search',
-            query: {'keyword': q, 'page': '1', 'pageSize': '30'});
-      } catch (legacyError) {
-        throw ProviderError('MovieBox search failed. Current endpoint: $firstError. Legacy endpoint: $legacyError');
-      }
-    }
+    // Official MovieBox search endpoint: POST /subject/search.
+    // Do not send x-client-token and do not fall back to the obsolete GET /search.
+    final json = await _json('subject/search', method: 'POST',
+        body: {'keyword': q, 'page': 1, 'perPage': 20});
     final data = json is Map ? json['data'] : null;
     final raw = data is Map ? (data['items'] ?? data['list'] ?? data['subjectList']) : null;
     final items = raw is List ? raw : const <dynamic>[];
@@ -460,10 +453,11 @@ class MovieBoxAdapter extends Adapter {
       'Origin': 'https://movieboxph.org',
     };
     Future<List<Source>> fetch(int season, int episode) async {
+      final playPath = item.detailPath ?? '';
       final json = await _json('subject/play', query: {
-        'subjectId': item.id, 'detailPath': item.detailPath ?? '',
+        'subjectId': item.id, 'detailPath': playPath,
         'se': season.toString(), 'ep': episode.toString(),
-      });
+      }, referer: '$_web/play/$playPath');
       final data = json is Map ? json['data'] : null;
       final out = <Source>[];
       final seen = <String>{};
@@ -476,12 +470,16 @@ class MovieBoxAdapter extends Adapter {
         }
         if (value is! String || !isHttp(value) || !seen.add(value)) return;
         final lower = value.toLowerCase();
+        final cleanUrl = lower.split('?').first;
         final hint = label.toLowerCase();
-        final hls = lower.contains('.m3u8') || hint.contains('hls') ||
+        final hls = cleanUrl.endsWith('.m3u8') || hint.contains('hls') ||
             hint.contains('mpegurl');
-        final mp4 = lower.contains('.mp4') || hint.contains('mp4');
-        if (!hls && !mp4 && !streamContext) return;
-        final kind = hls ? 'HLS' : 'MP4';
+        final dash = cleanUrl.endsWith('.mpd') || hint.contains('dash');
+        final mp4 = cleanUrl.endsWith('.mp4') || hint.contains('mp4') ||
+            lower.contains('hakunaymatata.com');
+        // Stream arrays may contain signed URLs or extension-less CDN paths.
+        if (!hls && !dash && !mp4 && !streamContext) return;
+        final kind = hls ? 'HLS' : dash ? 'DASH' : 'MP4';
         out.add(Source.clean(name: '$label · $kind',
             url: value, headers: playerHeaders));
       }
@@ -490,9 +488,11 @@ class MovieBoxAdapter extends Adapter {
         if (node is List) {
           for (final value in node) { scan(value, label, depth + 1, streamContext); }
         } else if (node is Map) {
+          final format = (node['format'] ?? node['mimeType'] ?? node['type'] ?? '').toString();
           final quality = (node['resolution'] ?? node['resolutions'] ??
-              node['quality'] ?? node['format'] ?? node['type'] ??
-              node['mimeType'] ?? label).toString();
+              node['quality'] ?? format).toString().isEmpty
+              ? label
+              : (node['resolution'] ?? node['resolutions'] ?? node['quality'] ?? format).toString();
           const urlKeys = ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl'];
           for (final key in urlKeys) {
             if (node[key] != null) addUrl(node[key], label: quality, streamContext: streamContext);
@@ -506,7 +506,8 @@ class MovieBoxAdapter extends Adapter {
                  'playsources', 'videos', 'video', 'qualities', 'urlinfo']
                     .contains(key);
             if (entry.value is Map || entry.value is List) {
-              final childLabel = key == 'hls' ? 'HLS' : key == 'mp4' ? 'MP4' : quality;
+              final childLabel = key == 'hls' ? 'HLS' : key == 'dash' ? 'DASH' :
+                  key == 'mp4' ? 'MP4' : quality;
               scan(entry.value, childLabel, depth + 1, isStreamBranch);
             }
           }
