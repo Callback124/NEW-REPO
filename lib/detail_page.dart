@@ -159,7 +159,7 @@ class _DetailPageState extends State<DetailPage> {
                             ChoiceChip(
                               showCheckmark: false,
                               label: Text(dub.language + (dub.original ? ' · Original' : '')),
-                              selected: dub.detailPath == d.detailPath,
+                              selected: dub.subjectId == d.id && dub.detailPath == d.detailPath,
                               onSelected: (_) => _selectDub(dub),
                             ),
                         ],
