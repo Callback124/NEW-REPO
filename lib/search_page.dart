@@ -47,6 +47,14 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
 
   void _onChanged(String v) {
     _debounce?.cancel();
+    setState(() {
+      _query = '';
+      _groups = const [];
+      _loading = false;
+      _loadingMore = false;
+      _hasMore = false;
+      _suggestions = const [];
+    });
     _loadSuggestions(v);
   }
 
@@ -122,8 +130,9 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
   }
 
   Future<void> _loadMore() async {
-    final p = app.scope().where((x) => x.kind == 'moviebox').firstOrNull;
-    if (p == null) return;
+    final matches = app.scope().where((x) => x.kind == 'moviebox').toList();
+    if (matches.isEmpty) return;
+    final p = matches.first;
     setState(() => _loadingMore = true);
     try {
       final next = await MovieBoxAdapter().searchPage(p, _query, page: _page + 1);
