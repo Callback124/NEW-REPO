@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'downloads_service.dart';
 import 'models.dart';
 import 'providers.dart';
-import 'store.dart';
 
 class DownloadPage extends StatefulWidget {
   const DownloadPage({super.key, required this.item});
@@ -35,7 +32,6 @@ class _DownloadPageState extends State<DownloadPage> {
   int _scanTotal = 0;
   List<_DownloadChoice> _choices = [];
   final Set<String> _selected = {};
-  final Map<String, int> _sizes = {};
   bool _queueing = false;
 
   bool get _series => _item.episodes.isNotEmpty || _item.type == 'series' || _item.subjectType == 2;
@@ -67,6 +63,8 @@ class _DownloadPageState extends State<DownloadPage> {
   }
 
   int _qualityRank(String q) {
+    if (q == '4K') return 2160;
+    if (q == '2K') return 1440;
     final m = RegExp(r'\d+').firstMatch(q);
     return m == null ? 0 : int.tryParse(m.group(0)!) ?? 0;
   }
@@ -84,7 +82,7 @@ class _DownloadPageState extends State<DownloadPage> {
   }
 
   Future<void> _scan() async {
-    setState(() { _loading = true; _error = null; _scanned = 0; _choices = []; _selected.clear(); _sizes.clear(); });
+    setState(() { _loading = true; _error = null; _scanned = 0; _choices = []; _selected.clear(); });
     try {
       if (!_series) {
         final sources = await _filesFor(null);
@@ -141,7 +139,6 @@ class _DownloadPageState extends State<DownloadPage> {
         final choice = matching[index];
         final size = await _getSize(choice.source);
         final key = _choiceKey(choice);
-        _sizes[key] = size;
         final pos = _choices.indexOf(choice);
         if (pos >= 0) _choices[pos] = _DownloadChoice(choice.episode, choice.source, choice.quality, size);
       }
@@ -326,7 +323,7 @@ class _DownloadPageState extends State<DownloadPage> {
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Text('E${ep.episode.toString().padLeft(2, '0')}', style: TextStyle(fontWeight: FontWeight.w800, color: available ? cs.onSurface : cs.onSurface.withOpacity(.35))),
                     const SizedBox(height: 5),
-                    Text(available ? _sizeLabel(match.size) : 'Unavailable',
+                    Text(available ? _sizeLabel(match!.size) : 'Unavailable',
                       style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
                     if (selected) Icon(Icons.check_circle, size: 15, color: cs.primary),
                   ]),
