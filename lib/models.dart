@@ -102,6 +102,7 @@ class Item {
   String get key => '$pid|$id';
 
   Item copyWith({
+    String? id,
     String? title,
     String? poster,
     String? year,
@@ -117,7 +118,7 @@ class Item {
   }) =>
       Item(
         pid: pid,
-        id: id,
+        id: id ?? this.id,
         type: type,
         title: title ?? this.title,
         poster: poster ?? this.poster,
