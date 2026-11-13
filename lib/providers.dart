@@ -133,7 +133,7 @@ class MovieBoxAdapter extends Adapter {
         throw ProviderError('MovieBox HTTP ${response.statusCode}');
       }
       final json = jsonDecode(utf8.decode(response.bodyBytes));
-      if (json is! Map || (json['code'] != 0 && json['message'] != 'success')) {
+      if (json is! Map || (json['code'] != 0 && json['code'] != '0' && json['message'] != 'success')) {
         throw ProviderError('MovieBox returned an unexpected response.');
       }
       return json;
