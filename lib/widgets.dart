@@ -44,7 +44,8 @@ class Poster extends StatelessWidget {
                 imageUrl: url!,
                 fit: BoxFit.cover,
                 memCacheWidth: 360,
-                fadeInDuration: const Duration(milliseconds: 120),
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
                 placeholder: (_, __) => Center(
                   child: SvgPicture.asset(
                     'assets/provider_placeholder.svg',
@@ -178,7 +179,7 @@ class ShelfRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: shelf.items.length,
               itemExtent: w + 12,
-              cacheExtent: w * 4,
+              cacheExtent: w * 7,
               itemBuilder: (context, i) {
                 final it = shelf.items[i];
                 return Padding(
