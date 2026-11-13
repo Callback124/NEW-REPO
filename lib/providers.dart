@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
 import 'store.dart';
@@ -114,42 +116,126 @@ Future<List<Source>> getSources(Item item, Episode? ep) async {
 /* ---------- MovieBox built-in provider ---------- */
 
 class MovieBoxAdapter extends Adapter {
-  static const _homeUrl = 'https://h5-api.aoneroom.com/wefeed-h5api-bff/home';
-  static const _headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    'Origin': 'https://movieboxph.org',
-    'Referer': 'https://movieboxph.org/',
+  static const _base = 'https://h5-api.aoneroom.com/wefeed-h5api-bff';
+  static const _web = 'https://movieboxph.org';
+  static const _ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+  static const _tokenKey = 'moviebox_guest_token';
+  static const _tokenTimeKey = 'moviebox_guest_token_time';
+  static const _ttlMs = 45 * 60 * 1000;
+  static final http.Client _client = http.Client();
+  static Future<String>? _tokenFlight;
+
+  Map<String, String> _headers() => {
+    'User-Agent': _ua, 'Origin': _web, 'Referer': '$_web/',
     'x-client-info': '{"timezone":"Asia/Calcutta"}',
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Connection': 'close',
+    'x-request-lang': 'en', 'Accept': 'application/json',
   };
 
-  Future<dynamic> _homeJson() async {
+  String _clientToken() {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final reversed = now.toString().split('').reversed.join();
+    return now.toString() + ',' + md5.convert(utf8.encode(reversed)).toString();
+  }
+
+  Future<String> _getToken({bool force = false}) async {
+    if (!force) {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_tokenKey) ?? '';
+      final savedAt = prefs.getInt(_tokenTimeKey) ?? 0;
+      final age = DateTime.now().millisecondsSinceEpoch - savedAt;
+      if (saved.isNotEmpty && age >= 0 && age < _ttlMs) return saved;
+    }
+    if (_tokenFlight != null) return _tokenFlight!;
+    final future = _fetchToken();
+    _tokenFlight = future;
+    try { return await future; } finally { _tokenFlight = null; }
+  }
+
+  Future<String> _fetchToken() async {
+    final prefs = await SharedPreferences.getInstance();
     Object? lastError;
-    for (final endpoint in [
-      _homeUrl,
-      'https://movieboxph.org/wefeed-h5api-bff/home',
+    for (final url in [
+      _web + '/wefeed-h5api-bff/home?page=1&perPage=1',
+      _base + '/home?page=1&perPage=1',
     ]) {
       try {
-        final response = await http.get(Uri.parse(endpoint), headers: _headers)
-            .timeout(const Duration(seconds: 25));
-        if (response.statusCode != 200) {
-          throw ProviderError('MovieBox HTTP ${response.statusCode}');
+        final response = await _client.get(Uri.parse(url), headers: _headers())
+            .timeout(const Duration(seconds: 20));
+        String? token;
+        final xUser = response.headers['x-user'];
+        if (xUser != null) {
+          try { token = (jsonDecode(xUser) as Map)['token']?.toString(); } catch (_) {}
         }
-        final json = jsonDecode(utf8.decode(response.bodyBytes));
-        if (json is! Map || (json['code'] != 0 && json['code'] != '0' && json['message'] != 'success')) {
-          throw ProviderError('MovieBox returned an unexpected response.');
+        if (token == null || token.isEmpty) {
+          final cookies = response.headers['set-cookie'] ?? '';
+          final match = RegExp(r'(?:^|;\s*)token=([^;,\s]+)').firstMatch(cookies);
+          token = match?.group(1);
         }
-        return json;
-      } catch (e) {
-        lastError = e;
-      }
+        if (token != null && token.isNotEmpty) {
+          await prefs.setString(_tokenKey, token);
+          await prefs.setInt(_tokenTimeKey, DateTime.now().millisecondsSinceEpoch);
+          return token;
+        }
+        lastError = ProviderError('Token bootstrap HTTP ' + response.statusCode.toString() + ': x-user/token cookie missing.');
+      } catch (e) { lastError = e; }
     }
-    if (lastError is ProviderError) throw lastError;
-    if (lastError is TimeoutException) throw ProviderError('MovieBox request timed out.');
-    if (lastError is FormatException) throw ProviderError('MovieBox returned invalid JSON.');
-    throw ProviderError('Could not connect to MovieBox. Both homepage endpoints failed.');
+    final cached = prefs.getString(_tokenKey) ?? '';
+    if (cached.isNotEmpty) return cached;
+    throw ProviderError('MovieBox guest token unavailable. ' + lastError.toString());
+  }
+
+  Future<http.Response> _request(String path, {
+    String method = 'GET', Map<String, String>? query,
+    Map<String, dynamic>? body, bool retry = true,
+  }) async {
+    final uri = Uri.parse(_base + '/' + path).replace(queryParameters: query);
+    final token = await _getToken();
+    final headers = _headers()
+      ..addAll({
+        'Authorization': 'Bearer ' + token,
+        'Cookie': 'token=' + token + '; moviebox_web_tk=' + token + '; NEXT_LOCALE=en',
+        'x-client-token': _clientToken(),
+      });
+    final request = http.Request(method, uri)..headers.addAll(headers);
+    if (method == 'POST') {
+      request.headers['Content-Type'] = 'application/json; charset=utf-8';
+      request.body = jsonEncode(body ?? const {});
+    }
+    final streamed = await _client.send(request).timeout(const Duration(seconds: 25));
+    final response = await http.Response.fromStream(streamed);
+    final responseText = utf8.decode(response.bodyBytes);
+    final invalid = response.statusCode == 401 ||
+        responseText.toLowerCase().contains('invalid token') ||
+        responseText.toLowerCase().contains('token expired');
+    if (invalid && retry) {
+      await _getToken(force: true);
+      return _request(path, method: method, query: query, body: body, retry: false);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ProviderError('MovieBox HTTP ' + response.statusCode.toString() +
+          '\n' + method + ' ' + uri.toString() + '\n' +
+          (responseText.isEmpty ? 'Empty response body' : responseText));
+    }
+    dynamic decoded;
+    try { decoded = jsonDecode(responseText); }
+    catch (_) { throw ProviderError('MovieBox invalid JSON for ' + uri.toString() + '\n' + responseText); }
+    if (decoded is Map && decoded['code'] != null &&
+        decoded['code'].toString() != '0' &&
+        !decoded['message'].toString().toLowerCase().contains('success')) {
+      final reason = (decoded['message'] ?? decoded['reason'] ?? decoded['code']).toString();
+      if (retry && reason.toLowerCase().contains('token')) {
+        await _getToken(force: true);
+        return _request(path, method: method, query: query, body: body, retry: false);
+      }
+      throw ProviderError('MovieBox API error (' + decoded['code'].toString() + '): ' + reason + '\n' + responseText);
+    }
+    return response;
+  }
+
+  Future<dynamic> _json(String path, {String method = 'GET',
+      Map<String, String>? query, Map<String, dynamic>? body}) async {
+    final response = await _request(path, method: method, query: query, body: body);
+    return jsonDecode(utf8.decode(response.bodyBytes));
   }
 
   String? _image(dynamic value) {
@@ -158,86 +244,149 @@ class MovieBoxAdapter extends Adapter {
     return null;
   }
 
-  Item _item(ProviderDef p, Map raw, {bool banner = false}) {
-    final id = (raw['subjectId'] ?? raw['id'] ?? '').toString();
-    final typeCode = raw['subjectType'];
-    final type = typeCode == 2 ? 'series' : 'movie';
-    final image = banner
-        ? (_image(raw['image']) ?? _image(raw['subject'] is Map ? raw['subject']['cover'] : null))
-        : (_image(raw['cover']) ?? _image(raw['image']));
-    final year = (raw['releaseDate'] ?? raw['year'])?.toString();
-    final rating = (raw['score'] ?? raw['imdbRating'])?.toString();
+  Item _item(ProviderDef p, Map raw) {
+    final subject = raw['subject'] is Map ? raw['subject'] as Map : raw;
+    final code = (subject['subjectType'] as num?)?.toInt() ?? 1;
+    final date = subject['releaseDate']?.toString() ?? '';
+    final genre = subject['genre'];
     return Item(
-      pid: p.id,
-      id: id,
-      type: type,
-      title: (raw['title'] ?? (raw['subject'] is Map ? raw['subject']['title'] : null) ?? 'Untitled').toString(),
-      poster: image,
-      bg: banner ? image : null,
-      year: year,
-      rating: rating,
-      plot: raw['description']?.toString(),
-      genres: (raw['genre'] is String
-          ? (raw['genre'] as String).split(',')
-          : (raw['genres'] is List ? (raw['genres'] as List).map((e) => e.toString()).toList() : const <String>[]))
-          .map((e) => e.trim()).where((e) => e.isNotEmpty).take(3).toList(),
-      detailPath: raw['detailPath']?.toString(),
+      pid: p.id, id: (subject['subjectId'] ?? raw['subjectId'] ?? '').toString(),
+      type: code == 2 ? 'series' : 'movie', subjectType: code,
+      title: (subject['title'] ?? raw['title'] ?? 'Untitled').toString(),
+      poster: _image(subject['cover']) ?? _image(raw['cover']) ?? _image(raw['image']),
+      bg: _image(subject['stills']) ?? _image(subject['cover']) ?? _image(raw['image']),
+      year: date.length >= 4 ? date.substring(0, 4) : subject['year']?.toString(),
+      rating: (subject['imdbRatingValue'] ?? subject['score'] ?? subject['imdbRating'])?.toString(),
+      plot: subject['description']?.toString(),
+      genres: (genre is String ? genre.split(',') :
+          (subject['genres'] is List ? (subject['genres'] as List).map((e) => e.toString()).toList() : const <String>[]))
+          .map((e) => e.trim()).where((e) => e.isNotEmpty).take(4).toList(),
+      detailPath: (subject['detailPath'] ?? raw['detailPath'])?.toString(),
     );
   }
 
-  Future<List<Shelf>> _shelves(ProviderDef p) async {
-    final json = await _homeJson();
+  @override
+  Future<List<Shelf>> home(ProviderDef p) async {
+    final json = await _json('home');
     final data = json['data'];
     final ops = data is Map ? (data['operatingList'] as List? ?? const []) : const [];
-    if (ops.isEmpty) throw ProviderError('MovieBox homepage has no content.');
-
     final result = <Shelf>[];
-    final first = ops.first;
-    if (first is Map) {
-      final banner = first['banner'];
-      final bannerItems = banner is Map ? (banner['items'] as List? ?? const []) : const [];
-      final featured = bannerItems.whereType<Map>()
-          .map((b) => _item(p, b, banner: true))
-          .where((it) => it.id.isNotEmpty)
-          .toList();
-      if (featured.isNotEmpty) result.add(Shelf('Featured', featured));
+    for (final op in ops.whereType<Map>()) {
+      final type = (op['type'] ?? op['moduleType'] ?? '').toString().toUpperCase();
+      final banner = op['banner'];
+      final rawItems = (op['subjects'] as List?) ?? (op['items'] as List?) ??
+          (banner is Map ? banner['items'] as List? : null) ?? const [];
+      final items = rawItems.whereType<Map>().map((x) => _item(p, x))
+          .where((x) => x.id.isNotEmpty).toList();
+      if (items.isEmpty) continue;
+      final title = (op['title'] ?? op['name'] ??
+          (type == 'BANNER' ? 'Featured' : type == 'APPOINTMENT_LIST' ? 'Coming Soon' : 'Movies & Series'))
+          .toString().trim();
+      // BANNER entries are a normal horizontal shelf, never a hero carousel.
+      result.add(Shelf(title.isEmpty ? 'Movies & Series' : title, items,
+          genreTopId: op['genreTopId']?.toString()));
     }
-
-    for (final op in ops.skip(1).whereType<Map>()) {
-      final rawItems = (op['subjects'] as List?) ?? (op['items'] as List?) ?? const [];
-      final items = rawItems.whereType<Map>()
-          .map((it) => _item(p, it))
-          .where((it) => it.id.isNotEmpty)
-          .toList();
-      final title = (op['title'] ?? '').toString().trim();
-      if (title.isNotEmpty && items.isNotEmpty) result.add(Shelf(title, items));
-    }
-    if (result.isEmpty) throw ProviderError('MovieBox returned no usable titles.');
+    if (result.isEmpty) throw ProviderError('MovieBox returned no usable home rows.');
     return result;
   }
 
   @override
-  Future<List<Shelf>> home(ProviderDef p) => _shelves(p);
-
-  @override
   Future<List<Item>> search(ProviderDef p, String query) async {
-    final q = query.trim().toLowerCase();
+    final q = query.trim();
     if (q.isEmpty) return const [];
-    final shelves = await _shelves(p);
-    final seen = <String>{};
-    return [
-      for (final shelf in shelves)
-        for (final item in shelf.items)
-          if (item.title.toLowerCase().contains(q) && seen.add(item.id)) item,
-    ];
+    final json = await _json('subject/search', method: 'POST',
+        body: {'keyword': q, 'page': 1, 'perPage': 30});
+    final data = json['data'];
+    final items = data is Map ? (data['items'] as List? ?? const []) : const [];
+    return items.whereType<Map>().map((x) => _item(p, x)).where((x) => x.id.isNotEmpty).toList();
+  }
+
+  Future<List<String>> suggestions(String query) async {
+    if (query.trim().isEmpty) return const [];
+    final json = await _json('subject/search-suggest',
+        query: {'keyword': query.trim(), 'perPage': '10'});
+    final data = json['data'];
+    final items = data is Map ? (data['items'] as List? ?? const []) : const [];
+    return items.whereType<Map>().map((x) => x['word']?.toString() ?? '')
+        .where((x) => x.isNotEmpty).toList();
+  }
+
+  Future<List<Item>> viewMore(ProviderDef p, String id, {int page = 1, int perPage = 20}) async {
+    final json = await _json('ranking-list/content',
+        query: {'id': id, 'page': page.toString(), 'perPage': perPage.toString()});
+    final data = json['data'];
+    final items = data is Map ? (data['subjectList'] as List? ?? const []) : const [];
+    return items.whereType<Map>().map((x) => _item(p, x)).where((x) => x.id.isNotEmpty).toList();
   }
 
   @override
-  Future<Item> detail(ProviderDef p, Item item) async => item;
+  Future<Item> detail(ProviderDef p, Item item) async {
+    if ((item.detailPath ?? '').isEmpty) throw ProviderError('MovieBox title has no detailPath.');
+    final json = await _json('detail', query: {
+      'detailPath': item.detailPath!, 'subjectId': item.id,
+    });
+    final data = json['data'];
+    final subject = data is Map && data['subject'] is Map ? data['subject'] as Map : const {};
+    final resource = data is Map && data['resource'] is Map ? data['resource'] as Map : const {};
+    final eps = <Episode>[];
+    for (final season in (resource['seasons'] as List? ?? const []).whereType<Map>()) {
+      final sn = (season['se'] as num?)?.toInt() ?? 1;
+      final maxEp = (season['maxEp'] as num?)?.toInt() ?? 0;
+      for (var n = 1; n <= maxEp; n++) {
+        eps.add(Episode(id: 's' + sn.toString() + 'e' + n.toString(),
+            season: sn, episode: n, title: 'Episode ' + n.toString()));
+      }
+    }
+    return item.copyWith(
+      title: subject['title']?.toString(), plot: subject['description']?.toString(),
+      poster: _image(subject['cover']) ?? item.poster,
+      bg: _image(subject['stills']) ?? item.bg,
+      year: (subject['releaseDate']?.toString().length ?? 0) >= 4
+          ? subject['releaseDate'].toString().substring(0, 4) : item.year,
+      rating: (subject['imdbRatingValue'] ?? subject['score'])?.toString() ?? item.rating,
+      episodes: eps,
+      dubs: (subject['dubs'] as List? ?? const []).whereType<Map>().map((d) => DubOption(
+        subjectId: (d['subjectId'] ?? item.id).toString(),
+        language: (d['lanName'] ?? d['lanCode'] ?? 'Original').toString(),
+        detailPath: (d['detailPath'] ?? item.detailPath ?? '').toString(),
+        original: d['original'] == true,
+      )).toList(),
+    );
+  }
 
   @override
   Future<List<Source>> sources(ProviderDef p, Item item, Episode? ep) async {
-    throw ProviderError('MovieBox catalog is connected, but its detail/stream API was not included. Playback is not available yet.');
+    final series = item.subjectType == 2;
+    final se = series ? (ep?.season ?? 1) : 0;
+    final number = series ? (ep?.episode ?? 1) : 0;
+    Future<List<Source>> fetch(int season, int episode) async {
+      final json = await _json('subject/play', query: {
+        'subjectId': item.id, 'detailPath': item.detailPath ?? '',
+        'se': season.toString(), 'ep': episode.toString(),
+      });
+      final data = json['data'];
+      final out = <Source>[];
+      if (data is Map) {
+        const playerHeaders = {
+          'User-Agent': 'okhttp/4.12.0',
+          'Referer': 'https://movieboxph.org/',
+          'Origin': 'https://movieboxph.org',
+        };
+        for (final stream in (data['streams'] as List? ?? const []).whereType<Map>()) {
+          out.add(Source.clean(name: (stream['resolutions'] ?? 'Auto').toString() +
+              ' · ' + (stream['format'] ?? 'MP4').toString(),
+              url: stream['url']?.toString(), headers: playerHeaders));
+        }
+        for (final stream in (data['hls'] as List? ?? const []).whereType<Map>()) {
+          out.add(Source.clean(name: (stream['resolutions'] ?? 'Auto').toString() + ' · HLS',
+              url: stream['url']?.toString(), headers: playerHeaders));
+        }
+      }
+      return out.where((x) => x.playable).toList();
+    }
+    var streams = await fetch(se, number);
+    if (streams.isEmpty) streams = await fetch(se == 0 ? 1 : 0, number == 0 ? 1 : 0);
+    return streams;
   }
 }
 
