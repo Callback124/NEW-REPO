@@ -12,7 +12,7 @@ class AppState extends ChangeNotifier {
   List<ProviderDef> providers = [];
   List<Item> library = [];
   Map<String, Progress> progress = {};
-  String active = 'all';
+  String active = 'moviebox';
   ThemeMode theme = ThemeMode.light;
   bool autoplay = false;
 
@@ -39,7 +39,13 @@ class AppState extends ChangeNotifier {
         });
       } catch (_) {}
     }
-    active = _sp.getString('active') ?? 'all';
+    active = _sp.getString('active') ?? 'moviebox';
+    if (active == 'all' || !providers.any((p) => p.id == active && p.enabled)) {
+      active = providers.any((p) => p.id == 'moviebox' && p.enabled)
+          ? 'moviebox'
+          : (providers.firstWhere((p) => p.enabled, orElse: () => ProviderDef.moviebox())).id;
+      _sp.setString('active', active);
+    }
     try {
       theme = ThemeMode.values.byName(_sp.getString('theme') ?? 'light');
     } catch (_) {
@@ -72,16 +78,19 @@ class AppState extends ChangeNotifier {
 
   List<ProviderDef> scope() {
     final e = enabled;
-    if (active != 'all' && !e.any((p) => p.id == active)) active = 'all';
-    return active == 'all' ? e : e.where((p) => p.id == active).toList();
+    if (!e.any((p) => p.id == active)) {
+      active = e.any((p) => p.id == 'moviebox')
+          ? 'moviebox'
+          : (e.isNotEmpty ? e.first.id : 'moviebox');
+    }
+    return e.where((p) => p.id == active).toList();
   }
 
   String get scopeName {
-    if (active == 'all') return 'All providers';
     for (final p in providers) {
       if (p.id == active) return p.name;
     }
-    return 'All providers';
+    return 'MovieBox';
   }
 
   ProviderDef? providerById(String id) {
@@ -105,7 +114,7 @@ class AppState extends ChangeNotifier {
 
   void removeProvider(String id) {
     providers = providers.where((p) => p.id != id).toList();
-    if (active == id) active = 'all';
+    if (active == id) active = providers.any((p) => p.id == 'moviebox' && p.enabled) ? 'moviebox' : (enabled.isNotEmpty ? enabled.first.id : 'moviebox');
     _saveProviders();
     notifyListeners();
   }
