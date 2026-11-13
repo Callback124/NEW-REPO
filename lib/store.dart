@@ -151,6 +151,18 @@ class AppState extends ChangeNotifier {
     _saveProgress();
   }
 
+  void removeProgress(Item item, Episode? ep) {
+    progress.remove(progressKey(item, ep));
+    _saveProgress();
+    progressRev.value++;
+  }
+
+  void clearProgress() {
+    progress.clear();
+    _saveProgress();
+    progressRev.value++;
+  }
+
   List<MapEntry<String, Progress>> get resumables {
     final l = progress.entries
         .where((e) => e.value.d > 0 && e.value.frac > .02 && e.value.frac < .95)
