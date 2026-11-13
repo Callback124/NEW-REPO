@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 import 'downloads_service.dart';
 
@@ -25,6 +27,23 @@ class _DownloadsPageState extends State<DownloadsPage> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _playOffline(DownloadRecord record) async {
+    final raw = record.localUri;
+    if (raw == null || raw.isEmpty) {
+      await DownloadService.instance.open(record.id);
+      return;
+    }
+    final uri = Uri.tryParse(raw);
+    if (uri == null || uri.scheme != 'file') {
+      await DownloadService.instance.open(record.id);
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => OfflineVideoPage(file: File(uri.toFilePath()), title: record.title),
+    ));
   }
 
   String _status(DownloadRecord r) => switch (r.status) {
@@ -78,22 +97,118 @@ class _DownloadsPageState extends State<DownloadsPage> {
                   ]),
                   trailing: PopupMenuButton<String>(
                     onSelected: (v) async {
-                      if (v == 'open') await DownloadService.instance.open(r.id);
+                      if (v == 'play') await _playOffline(r);\n                      if (v == 'open') await DownloadService.instance.open(r.id);
                       if (v == 'cancel') await DownloadService.instance.cancel(r.id);
                       if (v == 'remove') await DownloadService.instance.forget(r.id);
                     },
                     itemBuilder: (_) => [
-                      if (done) const PopupMenuItem(value: 'open', child: Text('Open file')),
+                      if (done) const PopupMenuItem(value: 'play', child: Text('Play offline')),\n                      if (done) const PopupMenuItem(value: 'open', child: Text('Open with another app')),
                       if (!done && !failed) const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
                       const PopupMenuItem(value: 'remove', child: Text('Remove')),
                     ],
                   ),
-                  onTap: done ? () => DownloadService.instance.open(r.id) : null,
+                  onTap: done ? () => _playOffline(r) : null,
                 );
               },
             ),
         ]);
       },
+    );
+  }
+}
+
+
+class OfflineVideoPage extends StatefulWidget {
+  const OfflineVideoPage({super.key, required this.file, required this.title});
+  final File file;
+  final String title;
+
+  @override
+  State<OfflineVideoPage> createState() => _OfflineVideoPageState();
+}
+
+class _OfflineVideoPageState extends State<OfflineVideoPage> {
+  late final VideoPlayerController _controller = VideoPlayerController.file(widget.file);
+  bool _ready = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await _controller.initialize();
+      await _controller.setLooping(false);
+      if (mounted) setState(() => _ready = true);
+      await _controller.play();
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not play this downloaded video: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _time(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      body: Center(
+        child: _error != null
+            ? Padding(padding: const EdgeInsets.all(24), child: Text(_error!, textAlign: TextAlign.center))
+            : !_ready
+                ? const CircularProgressIndicator()
+                : ListenableBuilder(
+                    listenable: _controller,
+                    builder: (context, _) {
+                      final value = _controller.value;
+                      final duration = value.duration;
+                      final position = value.position;
+                      final max = duration.inMilliseconds.toDouble().clamp(1, double.infinity);
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AspectRatio(
+                            aspectRatio: value.aspectRatio > 0 ? value.aspectRatio : 16 / 9,
+                            child: VideoPlayer(_controller),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Row(children: [
+                              Text(_time(position), style: Theme.of(context).textTheme.labelSmall),
+                              Expanded(
+                                child: Slider(
+                                  value: position.inMilliseconds.toDouble().clamp(0, max),
+                                  max: max,
+                                  onChanged: (v) => _controller.seekTo(Duration(milliseconds: v.round())),
+                                ),
+                              ),
+                              Text(_time(duration), style: Theme.of(context).textTheme.labelSmall),
+                            ]),
+                          ),
+                          IconButton.filled(
+                            onPressed: () => value.isPlaying ? _controller.pause() : _controller.play(),
+                            icon: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow),
+                            iconSize: 30,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+      ),
     );
   }
 }
