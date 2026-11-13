@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'models.dart';
+import 'download_page.dart';
 import 'player_page.dart';
 import 'providers.dart';
 import 'store.dart';
@@ -197,6 +198,18 @@ class _DetailPageState extends State<DetailPage> {
                         ),
                         onPressed: () => app.toggleLibrary(d),
                         child: const Text('Library'),
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: loading || err != null
+                            ? null
+                            : () => Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => DownloadPage(item: d),
+                                )),
+                        icon: const Icon(Icons.download_outlined, size: 18),
+                        label: const Text('Download'),
                       ),
                     ]),
                   ),
