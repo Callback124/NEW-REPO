@@ -22,7 +22,9 @@ class HomePage extends StatelessWidget {
               title: Text(
                 app.active == 'all'
                     ? 'All providers'
-                    : (app.enabled.where((p) => p.id == app.active).firstOrNull?.name ?? app.scopeName),
+                    : (app.enabled.any((p) => p.id == app.active)
+                        ? app.enabled.firstWhere((p) => p.id == app.active).name
+                        : app.scopeName),
                 style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.3),
               ),
               actions: [
