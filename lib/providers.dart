@@ -230,7 +230,7 @@ class MovieBoxAdapter extends Adapter {
       final fallbackStream = await _client.send(fallbackRequest).timeout(const Duration(seconds: 25));
       response = await http.Response.fromStream(fallbackStream);
     }
-    if (response.statusCode == 403 || response.statusCode >= 500) {
+    if (response.statusCode == 400 || response.statusCode == 403 || response.statusCode >= 500) {
       final fallbackUri = Uri.parse(_web + '/wefeed-h5api-bff/' + path)
           .replace(queryParameters: query);
       final fallbackRequest = http.Request(method, fallbackUri)..headers.addAll(headers);
