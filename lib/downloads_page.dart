@@ -102,7 +102,8 @@ class _DownloadsPageState extends State<DownloadsPage> {
                       if (v == 'remove') await DownloadService.instance.forget(r.id);
                     },
                     itemBuilder: (_) => [
-                      if (done) const PopupMenuItem(value: 'play', child: Text('Play offline')),\n                      if (done) const PopupMenuItem(value: 'open', child: Text('Open with another app')),
+                      if (done) const PopupMenuItem(value: 'play', child: Text('Play offline')),
+                      if (done) const PopupMenuItem(value: 'open', child: Text('Open with another app')),
                       if (!done && !failed) const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
                       const PopupMenuItem(value: 'remove', child: Text('Remove')),
                     ],
@@ -177,7 +178,7 @@ class _OfflineVideoPageState extends State<OfflineVideoPage> {
                       final value = _controller.value;
                       final duration = value.duration;
                       final position = value.position;
-                      final max = duration.inMilliseconds.toDouble().clamp(1, double.infinity);
+                      final max = duration.inMilliseconds.toDouble().clamp(1.0, double.infinity).toDouble();
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -191,7 +192,7 @@ class _OfflineVideoPageState extends State<OfflineVideoPage> {
                               Text(_time(position), style: Theme.of(context).textTheme.labelSmall),
                               Expanded(
                                 child: Slider(
-                                  value: position.inMilliseconds.toDouble().clamp(0, max),
+                                  value: position.inMilliseconds.toDouble().clamp(0.0, max).toDouble(),
                                   max: max,
                                   onChanged: (v) => _controller.seekTo(Duration(milliseconds: v.round())),
                                 ),
