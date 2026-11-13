@@ -171,18 +171,22 @@ class _DetailPageState extends State<DetailPage> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                     child: Wrap(spacing: 10, runSpacing: 10, children: [
-                      FilledButton.icon(
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
                         onPressed: loading || err != null
                             ? null
                             : () => _play(
                                 d, eps.isEmpty ? null : (_lastEp(d) ?? eps.first)),
-                        icon: const Icon(Icons.play_arrow),
-                        label: Text(loading ? 'Loading…' : _playLabel(d)),
+                        child: Text(loading ? 'Loading…' : 'Watch'),
                       ),
-                      OutlinedButton.icon(
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
                         onPressed: () => app.toggleLibrary(d),
-                        icon: Icon(app.inLibrary(d) ? Icons.check : Icons.add),
-                        label: Text(app.inLibrary(d) ? 'In library' : 'Library'),
+                        child: const Text('Library'),
                       ),
                     ]),
                   ),
