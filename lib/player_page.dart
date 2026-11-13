@@ -56,10 +56,6 @@ class _PlayerPageState extends State<PlayerPage> {
     SystemChrome.setSystemUIChangeCallback((visible) async {
       if (visible) await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     });
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
     _setup();
   }
 
@@ -93,14 +89,10 @@ class _PlayerPageState extends State<PlayerPage> {
           _msg = 'None of these sources can play in the app.';
           _showPickInMsg = true;
         });
-      } else if (ok.length == 1 || app.autoplay) {
-        await _load(ok.first);
       } else {
-        setState(() {
-          _msg = 'Choose a source to start watching.';
-          _showPickInMsg = true;
-        });
-        _pickSource();
+        // Auto quality always starts with the highest playable resolution.
+        // Users can still manually override it from the quality/source menu.
+        await _load(ok.first);
       }
     } catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = e.toString());
@@ -176,6 +168,11 @@ class _PlayerPageState extends State<PlayerPage> {
     try {
       await controller.initialize();
       if (!mounted || _player != controller) return;
+      final videoSize = controller.value.size;
+      final isLandscape = videoSize.width >= videoSize.height;
+      await SystemChrome.setPreferredOrientations(isLandscape
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
       await controller.setLooping(false);
       await controller.setPlaybackSpeed(_rate);
       if (_startAt != null) {
@@ -295,8 +292,16 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   int _sourceResolution(Source s) {
-    final m = RegExp(r'(\d{3,4})p?', caseSensitive: false).firstMatch(s.name);
-    return int.tryParse(m?.group(1) ?? '') ?? 0;
+    final text = '${s.name} ${s.note ?? ''} ${s.url ?? ''}'.toLowerCase();
+    if (RegExp(r'\b(8k|4320)\b').hasMatch(text)) return 4320;
+    if (RegExp(r'\b(4k|2160|uhd)\b').hasMatch(text)) return 2160;
+    final matches = RegExp(r'\b(\d{3,4})\s*p?\b').allMatches(text);
+    var best = 0;
+    for (final m in matches) {
+      final value = int.tryParse(m.group(1) ?? '') ?? 0;
+      if (value >= 240 && value <= 4320 && value > best) best = value;
+    }
+    return best;
   }
 
   Future<void> _switchDub(DubOption dub) async {
@@ -345,22 +350,18 @@ class _PlayerPageState extends State<PlayerPage> {
           padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Text('MovieBox languages', style: TextStyle(fontWeight: FontWeight.w700)),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              for (final dub in _item.dubs)
-                ChoiceChip(
-                  showCheckmark: false,
-                  label: Text(dub.language + (dub.original ? ' · Original' : '')),
-                  selected: dub.subjectId == _item.id && dub.detailPath == _item.detailPath,
-                  onSelected: (_) { Navigator.pop(context); _switchDub(dub); },
-                ),
-            ],
+        for (final dub in _item.dubs)
+          ListTile(
+            leading: const Icon(Icons.language),
+            title: Text(dub.language + (dub.original ? ' · Original' : '')),
+            trailing: dub.subjectId == _item.id && dub.detailPath == _item.detailPath
+                ? const Icon(Icons.check, color: Colors.green)
+                : null,
+            onTap: () {
+              Navigator.pop(context);
+              _switchDub(dub);
+            },
           ),
-        ),
       ],
       if (_audioTracks.isNotEmpty) ...[
         const Divider(),
@@ -445,19 +446,22 @@ class _PlayerPageState extends State<PlayerPage> {
         fit: StackFit.expand,
         children: [
           if (_player != null && _player!.value.isInitialized)
-            Center(
+            SizedBox.expand(
               child: LayoutBuilder(
-                builder: (context, constraints) => ClipRect(
-                  child: FittedBox(
-                    fit: _fits[_fitI].$1,
-                    alignment: Alignment.center,
-                    child: SizedBox(
-                      width: _player!.value.size.width,
-                      height: _player!.value.size.height,
-                      child: VideoPlayer(_player!),
+                builder: (context, constraints) {
+                  final videoSize = _player!.value.size;
+                  return ClipRect(
+                    child: FittedBox(
+                      fit: _fits[_fitI].$1,
+                      alignment: Alignment.center,
+                      child: SizedBox(
+                        width: videoSize.width,
+                        height: videoSize.height,
+                        child: VideoPlayer(_player!),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             )
           else
@@ -610,8 +614,6 @@ class _PlayerPageState extends State<PlayerPage> {
             _opt(Icons.graphic_eq, 'Audio', _pickAudio),
             _opt(Icons.subtitles_outlined, 'Subtitles', _pickSubtitle),
             _opt(Icons.speed, _rate.toStringAsFixed(_rate == _rate.roundToDouble() ? 1 : 2), _pickSpeed),
-            _opt(Icons.picture_in_picture_alt_outlined, 'PIP',
-                () => toast(context, 'Picture-in-picture is coming soon')),
             _opt(Icons.video_settings, _qualityLabel(), _pickSource),
             _opt(Icons.crop_free, _fits[_fitI].$2, () {
               setState(() => _fitI = (_fitI + 1) % _fits.length);
