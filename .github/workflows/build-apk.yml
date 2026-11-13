@@ -35,7 +35,7 @@ jobs:
           s = p.read_text()
           s = re.sub(
               r'(<style name="(?:LaunchTheme|NormalTheme)"[^>]*>)',
-              lambda m: m.group(1) + "\\n        <item name=\"android:windowLayoutInDisplayCutoutMode\">shortEdges</item>",
+              lambda m: m.group(1) + "\n        <item name=\"android:windowLayoutInDisplayCutoutMode\">shortEdges</item>",
               s)
           p.write_text(s)
           PY
