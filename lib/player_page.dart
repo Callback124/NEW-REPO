@@ -24,6 +24,7 @@ class PlayerPage extends StatefulWidget {
 
 class _PlayerPageState extends State<PlayerPage> {
   VideoPlayerController? _player;
+  late Item _item = widget.item;
 
   late Episode? _ep = widget.ep;
   List<Source> _srcs = const [];
@@ -51,6 +52,9 @@ class _PlayerPageState extends State<PlayerPage> {
   void initState() {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setSystemUIChangeCallback((visible) async {
+      if (visible) await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    });
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -76,10 +80,11 @@ class _PlayerPageState extends State<PlayerPage> {
       _cur = null;
     });
     try {
-      final l = await getSources(widget.item, _ep);
+      final l = await getSources(_item, _ep);
       if (!mounted || gen != _gen) return;
       _srcs = l;
-      final ok = l.where((s) => s.playable).toList();
+      final ok = l.where((s) => s.playable).toList()
+        ..sort((a, b) => _sourceResolution(b).compareTo(_sourceResolution(a)));
       if (l.isEmpty) {
         setState(() => _msg = 'No sources were returned by MovieBox for this episode.');
       } else if (ok.isEmpty) {
@@ -114,7 +119,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (value.duration.inSeconds > 0 && value.position.inSeconds > 1 &&
         now.difference(_lastSave).inSeconds >= 5) {
       _lastSave = now;
-      app.setProgress(widget.item, _ep, value.position.inSeconds.toDouble(),
+      app.setProgress(_item, _ep, value.position.inSeconds.toDouble(),
           value.duration.inSeconds.toDouble());
     }
     if (value.hasError) {
@@ -126,7 +131,7 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     if (value.isCompleted && !_ended) {
       final d = value.duration.inSeconds.toDouble();
-      if (d > 0) app.setProgress(widget.item, _ep, d, d);
+      if (d > 0) app.setProgress(_item, _ep, d, d);
       setState(() => _ended = true);
     } else {
       setState(() {
@@ -148,7 +153,7 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _wasPlaying = false;
 
   Future<void> _load(Source s) async {
-    final pr = app.progress[progressKey(widget.item, _ep)];
+    final pr = app.progress[progressKey(_item, _ep)];
     final resume = pr != null && pr.t > 5 && pr.d - pr.t > 10;
     _startAt = resume ? Duration(seconds: pr.t.toInt()) : null;
     setState(() {
@@ -231,7 +236,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (value == null || !value.isInitialized) return;
     final d = value.duration.inSeconds.toDouble();
     final t = value.position.inSeconds.toDouble();
-    if (d > 0 && t > 1) app.setProgress(widget.item, _ep, t, d);
+    if (d > 0 && t > 1) app.setProgress(_item, _ep, t, d);
   }
 
   /* ---- controls ---- */
@@ -288,13 +293,66 @@ class _PlayerPageState extends State<PlayerPage> {
     ).whenComplete(_kick);
   }
 
+  int _sourceResolution(Source s) {
+    final m = RegExp(r'(\\d{3,4})p?', caseSensitive: false).firstMatch(s.name);
+    return int.tryParse(m?.group(1) ?? '') ?? 0;
+  }
+
+  Future<void> _switchDub(DubOption dub) async {
+    if (dub.subjectId == _item.id && dub.detailPath == _item.detailPath) return;
+    final previous = _player?.value.position ?? Duration.zero;
+    final current = _item.copyWith(id: dub.subjectId, detailPath: dub.detailPath);
+    setState(() {
+      _item = current;
+      _ep = null;
+      _msg = 'Loading ${dub.language}…';
+      _srcs = const [];
+      _cur = null;
+      _audioTracks = const [];
+    });
+    try {
+      final fresh = await detailOf(current);
+      if (!mounted) return;
+      setState(() {
+        _item = fresh;
+        _ep = fresh.episodes.isEmpty ? null : fresh.episodes.first;
+      });
+      await _setup();
+      if (previous > Duration.zero && _player?.value.isInitialized == true) {
+        await _player!.seekTo(previous);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _msg = 'Could not switch audio: $e');
+    }
+  }
+
   void _pickAudio() async {
     final controller = _player;
     if (controller == null) return;
     try { _audioTracks = await controller.getAudioTracks(); } catch (_) {}
     if (!mounted) return;
-    _sheet('Audio', [
-      if (_audioTracks.isEmpty)
+    _sheet('Audio / Language', [
+      if (_item.dubs.length > 1) ...[
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text('MovieBox languages', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+        for (final dub in _item.dubs)
+          ListTile(
+            title: Text(dub.language + (dub.original ? ' · Original' : '')),
+            trailing: dub.subjectId == _item.id && dub.detailPath == _item.detailPath
+                ? const Icon(Icons.check) : null,
+            onTap: () { Navigator.pop(context); _switchDub(dub); },
+          ),
+      ],
+      if (_audioTracks.isNotEmpty) ...[
+        const Divider(),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text('Embedded audio tracks', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ],
+      if (_audioTracks.isEmpty && _item.dubs.length <= 1)
         const ListTile(title: Text('No alternate audio tracks in this stream')),
       for (final track in _audioTracks)
         ListTile(
@@ -371,12 +429,17 @@ class _PlayerPageState extends State<PlayerPage> {
         children: [
           if (_player != null && _player!.value.isInitialized)
             Center(
-              child: FittedBox(
-                fit: _fits[_fitI].$1,
-                child: SizedBox(
-                  width: _player!.value.size.width,
-                  height: _player!.value.size.height,
-                  child: VideoPlayer(_player!),
+              child: LayoutBuilder(
+                builder: (context, constraints) => ClipRect(
+                  child: FittedBox(
+                    fit: _fits[_fitI].$1,
+                    alignment: Alignment.center,
+                    child: SizedBox(
+                      width: _player!.value.size.width,
+                      height: _player!.value.size.height,
+                      child: VideoPlayer(_player!),
+                    ),
+                  ),
                 ),
               ),
             )
@@ -400,6 +463,7 @@ class _PlayerPageState extends State<PlayerPage> {
     return ColoredBox(
       color: Colors.black54,
       child: SafeArea(
+        left: true, right: true, top: false, bottom: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 6),
           child: Column(
@@ -415,7 +479,7 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Widget _topRow() {
-    final sub = _ep != null ? '${_ep!.label} · ${_ep!.title}' : (widget.item.year ?? '');
+    final sub = _ep != null ? '${_ep!.label} · ${_ep!.title}' : (_item.year ?? '');
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -435,7 +499,7 @@ class _PlayerPageState extends State<PlayerPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.item.title,
+                Text(_item.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
