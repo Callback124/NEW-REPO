@@ -312,37 +312,43 @@ class MovieBoxAdapter extends Adapter {
     for (final op in ops.whereType<Map>()) {
       final type = (op['type'] ?? op['moduleType'] ?? '').toString().toUpperCase();
       final banner = op['banner'];
-      // MovieBox puts the hero-slide records specifically at banner.items.
-      // Treat those records as an ordinary poster shelf, not a hero carousel.
       dynamic bannerItems;
       if (banner is Map) {
         bannerItems = banner['items'] ?? banner['subjects'] ?? banner['list'] ?? banner['data'];
       } else if (banner is List) {
         bannerItems = banner;
       }
+      // The banner carousel data is deliberately rendered as its own normal shelf.
+      if (bannerItems is List && bannerItems.isNotEmpty) {
+        final items = bannerItems.whereType<Map>().map((x) => _item(p, x))
+            .where((x) => x.id.isNotEmpty).toList();
+        if (items.isNotEmpty) {
+          final bannerTitle = (banner is Map ? banner['title'] : null) ??
+              op['title'] ?? op['name'] ?? 'Featured';
+          result.add(Shelf(bannerTitle.toString().trim().isEmpty
+              ? 'Featured' : bannerTitle.toString().trim(), items));
+        }
+      }
       final normalItems = op['subjects'] is List && (op['subjects'] as List).isNotEmpty
           ? op['subjects']
           : op['items'] is List && (op['items'] as List).isNotEmpty
               ? op['items']
-              : null;
-      final rawItems = bannerItems is List && bannerItems.isNotEmpty
-          ? bannerItems
-          : normalItems ?? (type == 'BANNER' ? (op['list'] ?? op['data']) : null);
-      if (rawItems is! List) continue;
-      final items = rawItems.whereType<Map>().map((x) => _item(p, x))
-          .where((x) => x.id.isNotEmpty).toList();
-      if (items.isEmpty) continue;
-      final title = (op['title'] ?? op['name'] ??
-          (bannerItems is List && bannerItems.isNotEmpty || type == 'BANNER'
-              ? 'Featured' : type == 'APPOINTMENT_LIST' ? 'Coming Soon' : 'Movies & Series'))
-          .toString().trim();
-      result.add(Shelf(title.isEmpty ? 'Movies & Series' : title, items,
-          genreTopId: op['genreTopId']?.toString()));
+              : (type == 'BANNER' ? (op['list'] ?? op['data']) : null);
+      if (normalItems is List && normalItems.isNotEmpty) {
+        final items = normalItems.whereType<Map>().map((x) => _item(p, x))
+            .where((x) => x.id.isNotEmpty).toList();
+        if (items.isNotEmpty) {
+          final title = (op['title'] ?? op['name'] ??
+              (type == 'APPOINTMENT_LIST' ? 'Coming Soon' :
+                  type == 'BANNER' ? 'Featured' : 'Movies & Series')).toString().trim();
+          result.add(Shelf(title.isEmpty ? 'Movies & Series' : title, items,
+              genreTopId: op['genreTopId']?.toString()));
+        }
+      }
     }
     if (result.isEmpty) throw ProviderError('MovieBox returned no usable home rows.');
     return result;
   }
-
   @override
   Future<List<Item>> search(ProviderDef p, String query) async {
     final q = query.trim();
@@ -458,27 +464,35 @@ class MovieBoxAdapter extends Adapter {
       final data = json is Map ? json['data'] : null;
       final out = <Source>[];
       final seen = <String>{};
-      void addUrl(dynamic value, {String label = 'Auto'}) {
+      void addUrl(dynamic value, {String label = 'Auto', bool streamContext = false}) {
         if (value is! String || !isHttp(value) || !seen.add(value)) return;
         final lower = value.toLowerCase();
-        final hls = lower.contains('.m3u8') || label.toLowerCase().contains('hls');
-        final mp4 = lower.contains('.mp4') || label.toLowerCase().contains('mp4');
-        if (!hls && !mp4) return;
-        out.add(Source.clean(name: '$label · ${hls ? 'HLS' : 'MP4'}',
+        final hint = label.toLowerCase();
+        final hls = lower.contains('.m3u8') || hint.contains('hls') ||
+            hint.contains('mpegurl');
+        final mp4 = lower.contains('.mp4') || hint.contains('mp4');
+        if (!hls && !mp4 && !streamContext) return;
+        final kind = hls ? 'HLS' : 'MP4';
+        out.add(Source.clean(name: '$label · $kind',
             url: value, headers: playerHeaders));
       }
-      void scan(dynamic node, [String label = 'Auto', int depth = 0]) {
+      void scan(dynamic node, [String label = 'Auto', int depth = 0, bool streamContext = false]) {
         if (depth > 7) return;
         if (node is List) {
-          for (final value in node) { scan(value, label, depth + 1); }
+          for (final value in node) { scan(value, label, depth + 1, streamContext); }
         } else if (node is Map) {
-          final quality = (node['resolution'] ?? node['resolutions'] ?? node['quality'] ?? label).toString();
+          final quality = (node['resolution'] ?? node['resolutions'] ??
+              node['quality'] ?? node['format'] ?? node['type'] ??
+              node['mimeType'] ?? label).toString();
           for (final key in ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl']) {
-            addUrl(node[key], label: quality);
+            addUrl(node[key], label: quality, streamContext: streamContext);
           }
           for (final key in ['streams', 'hls', 'mp4', 'sources', 'list', 'items',
               'playList', 'playlist', 'data', 'source', 'videos', 'qualities']) {
-            if (node.containsKey(key)) scan(node[key], quality, depth + 1);
+            if (node.containsKey(key)) {
+              final childLabel = key == 'hls' ? 'HLS' : key == 'mp4' ? 'MP4' : quality;
+              scan(node[key], childLabel, depth + 1, true);
+            }
           }
         }
       }
