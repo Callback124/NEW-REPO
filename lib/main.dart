@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'bubble_nav_bar.dart';
 import 'home_page.dart';
 import 'library_page.dart';
 import 'search_page.dart';
@@ -100,13 +101,12 @@ class _ShellState extends State<Shell> {
     }
     return Scaffold(
       body: body,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _i,
-        onDestinationSelected: (v) => setState(() => _i = v),
-        destinations: [
+      bottomNavigationBar: BubbleNavBar(
+        index: _i,
+        onChanged: (v) => setState(() => _i = v),
+        items: [
           for (final d in _dest)
-            NavigationDestination(
-                icon: Icon(d.icon), selectedIcon: Icon(d.selected), label: d.label),
+            BubbleNavItem(icon: d.icon, selectedIcon: d.selected, label: d.label),
         ],
       ),
     );
