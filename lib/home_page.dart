@@ -28,11 +28,10 @@ class HomePage extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.3),
               ),
               actions: [
-                TextButton.icon(
+                IconButton(
                   onPressed: () => _pickScope(context),
                   icon: const Icon(Icons.dns_outlined),
-                  iconAlignment: IconAlignment.end,
-                  label: Text(app.scopeName),
+                  tooltip: 'Change provider',
                 ),
                 const SizedBox(width: 8),
               ],
