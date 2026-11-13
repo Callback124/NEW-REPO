@@ -118,7 +118,8 @@ class DownloadService extends ChangeNotifier {
     Map<String, String> headers = const {},
   }) async {
     final id = await _channel.invokeMethod<int>('enqueue', {
-      'url': url, 'title': title, 'fileName': fileName, 'headers': headers,\n      'gallery': downloadLocation == 'both',
+      'url': url, 'title': title, 'fileName': fileName, 'headers': headers,
+      'gallery': downloadLocation == 'both',
     });
     if (id == null) throw Exception('Android Download Manager did not return a task ID.');
     final entry = {'id': id, 'title': title, 'fileName': fileName, 'url': url};
