@@ -36,6 +36,8 @@ class _PlayerPageState extends State<PlayerPage> {
   Duration? _startAt;
   DateTime _lastSave = DateTime.fromMillisecondsSinceEpoch(0);
   int _gen = 0;
+  bool _transitioning = false;
+  bool _locked = false;
 
   bool _visible = true;
   Timer? _hideTimer;
@@ -58,16 +60,25 @@ class _PlayerPageState extends State<PlayerPage> {
     _setup();
   }
 
+  List<Episode> get _episodeSequence {
+    final sorted = [..._episodes]
+      ..sort((a, b) => a.season != b.season ? a.season.compareTo(b.season) : a.episode.compareTo(b.episode));
+    final seen = <String>{};
+    return sorted.where((e) => seen.add(e.id)).toList();
+  }
+
   Episode? get _next {
     if (_ep == null) return null;
-    final i = _episodes.indexWhere((e) => e.id == _ep!.id);
-    return i >= 0 && i + 1 < _episodes.length ? _episodes[i + 1] : null;
+    final sequence = _episodeSequence;
+    final i = sequence.indexWhere((e) => e.id == _ep!.id);
+    return i >= 0 && i + 1 < sequence.length ? sequence[i + 1] : null;
   }
 
   Episode? get _previous {
     if (_ep == null) return null;
-    final i = _episodes.indexWhere((e) => e.id == _ep!.id);
-    return i > 0 ? _episodes[i - 1] : null;
+    final sequence = _episodeSequence;
+    final i = sequence.indexWhere((e) => e.id == _ep!.id);
+    return i > 0 ? sequence[i - 1] : null;
   }
 
   /* ---- sources ---- */
@@ -89,8 +100,10 @@ class _PlayerPageState extends State<PlayerPage> {
           s.playable && (_sourceResolution(s) == 0 || _sourceResolution(s) <= 1080)).toList()
         ..sort((a, b) => _sourceResolution(b).compareTo(_sourceResolution(a)));
       if (l.isEmpty) {
+        _transitioning = false;
         setState(() => _msg = 'No sources were returned by MovieBox for this episode.');
       } else if (ok.isEmpty) {
+        _transitioning = false;
         setState(() {
           _msg = 'No supported source found. This device supports up to 1080p; 4K/above streams exceed its decoder capabilities.';
           _showPickInMsg = true;
@@ -101,6 +114,7 @@ class _PlayerPageState extends State<PlayerPage> {
         await _load(ok.first);
       }
     } catch (e) {
+      _transitioning = false;
       if (mounted && gen == _gen) setState(() => _msg = e.toString());
     }
   }
@@ -108,6 +122,7 @@ class _PlayerPageState extends State<PlayerPage> {
   void _onPlayerChanged() {
     final controller = _player;
     if (!mounted || controller == null || !controller.value.isInitialized) return;
+    if (_transitioning) return;
     final value = controller.value;
     if (_startAt != null && value.duration > Duration.zero) {
       final seek = _startAt!;
@@ -186,6 +201,7 @@ class _PlayerPageState extends State<PlayerPage> {
         await controller.seekTo(_startAt!);
         _startAt = null;
       }
+      _transitioning = false;
       controller.addListener(_onPlayerChanged);
       setState(() {
         _msg = null;
@@ -194,6 +210,7 @@ class _PlayerPageState extends State<PlayerPage> {
       await controller.play();
       if (mounted) setState(() {});
     } catch (e) {
+      _transitioning = false;
       if (!mounted) return;
       setState(() {
         _msg = 'Player error: $e';
@@ -229,8 +246,10 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   void _playNext() {
+    if (_transitioning) return;
     final n = _next;
     if (n == null) return;
+    _transitioning = true;
     _saveNow();
     _player?.pause();
     setState(() => _ep = n);
@@ -238,8 +257,10 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   void _playPrevious() {
+    if (_transitioning) return;
     final previous = _previous;
     if (previous == null) return;
+    _transitioning = true;
     _saveNow();
     _player?.pause();
     setState(() => _ep = previous);
@@ -268,6 +289,7 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   void _toggleUi() {
+    if (_locked) return;
     if (_visible) {
       _hideTimer?.cancel();
       setState(() => _visible = false);
@@ -373,15 +395,19 @@ class _PlayerPageState extends State<PlayerPage> {
     ]);
   }
 
-  void _pickSubtitle() {
-    _sheet('Subtitles', const [
-      ListTile(title: Text('No embedded subtitle tracks are exposed by this stream.')),
-    ]);
+  void _lockControls() {
+    _hideTimer?.cancel();
+    setState(() { _locked = true; _visible = true; });
   }
 
+  void _unlockControls() {
+    setState(() { _locked = false; _visible = true; });
+    _kick();
+  }
 
   void _selectEpisode(Episode episode) {
-    if (_ep?.id == episode.id) return;
+    if (_ep?.id == episode.id || _transitioning) return;
+    _transitioning = true;
     _saveNow();
     _player?.pause();
     setState(() => _ep = episode);
@@ -587,7 +613,7 @@ class _PlayerPageState extends State<PlayerPage> {
             )
           else
             const ColoredBox(color: Colors.black),
-          GestureDetector(behavior: HitTestBehavior.opaque, onTap: _toggleUi),
+          GestureDetector(behavior: HitTestBehavior.opaque, onTap: _locked ? null : _toggleUi),
           IgnorePointer(
             ignoring: !showUi,
             child: AnimatedOpacity(
@@ -606,6 +632,19 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Widget _controls(BuildContext context, bool msgOn, Episode? next) {
+    if (_locked) {
+      return ColoredBox(
+        color: Colors.transparent,
+        child: SafeArea(child: Align(
+          alignment: Alignment.topLeft,
+          child: IconButton(
+            tooltip: 'Unlock controls', onPressed: _unlockControls,
+            color: Colors.white, iconSize: 24,
+            icon: const Icon(Icons.lock_open_rounded),
+          ),
+        )),
+      );
+    }
     return ColoredBox(
       color: Colors.black54,
       child: SafeArea(
@@ -785,7 +824,7 @@ class _PlayerPageState extends State<PlayerPage> {
         Row(
           children: [
             _opt(Icons.graphic_eq, 'Audio', _pickAudio),
-            _opt(Icons.subtitles_outlined, 'Subtitles', _pickSubtitle),
+            _opt(Icons.lock_outline_rounded, 'Lock', _lockControls),
             if (_episodes.isNotEmpty && _ep != null)
               _opt(Icons.grid_view_rounded, 'Episodes', _pickEpisodes)
             else
