@@ -465,6 +465,12 @@ class MovieBoxAdapter extends Adapter {
       final out = <Source>[];
       final seen = <String>{};
       void addUrl(dynamic value, {String label = 'Auto', bool streamContext = false}) {
+        if (value is Map) {
+          for (final key in ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl']) {
+            if (value[key] != null) addUrl(value[key], label: label, streamContext: streamContext);
+          }
+          return;
+        }
         if (value is! String || !isHttp(value) || !seen.add(value)) return;
         final lower = value.toLowerCase();
         final hint = label.toLowerCase();
@@ -484,14 +490,21 @@ class MovieBoxAdapter extends Adapter {
           final quality = (node['resolution'] ?? node['resolutions'] ??
               node['quality'] ?? node['format'] ?? node['type'] ??
               node['mimeType'] ?? label).toString();
-          for (final key in ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl']) {
-            addUrl(node[key], label: quality, streamContext: streamContext);
+          const urlKeys = ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl'];
+          for (final key in urlKeys) {
+            if (node[key] != null) addUrl(node[key], label: quality, streamContext: streamContext);
           }
-          for (final key in ['streams', 'hls', 'mp4', 'sources', 'list', 'items',
-              'playList', 'playlist', 'data', 'source', 'videos', 'qualities']) {
-            if (node.containsKey(key)) {
+          for (final entry in node.entries) {
+            if (urlKeys.contains(entry.key) || entry.value == null) continue;
+            final key = entry.key.toLowerCase();
+            final isStreamBranch = streamContext ||
+                ['streams', 'hls', 'mp4', 'sources', 'source', 'playlist',
+                 'playlist', 'playlistinfo', 'playinfo', 'playsource',
+                 'playsources', 'videos', 'video', 'qualities', 'urlinfo']
+                    .contains(key);
+            if (entry.value is Map || entry.value is List) {
               final childLabel = key == 'hls' ? 'HLS' : key == 'mp4' ? 'MP4' : quality;
-              scan(node[key], childLabel, depth + 1, true);
+              scan(entry.value, childLabel, depth + 1, isStreamBranch);
             }
           }
         }
