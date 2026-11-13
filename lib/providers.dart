@@ -501,7 +501,7 @@ class MovieBoxAdapter extends Adapter {
             if (urlKeys.contains(entry.key) || entry.value == null) continue;
             final key = entry.key.toLowerCase();
             final isStreamBranch = streamContext ||
-                ['streams', 'hls', 'mp4', 'sources', 'source', 'playlist',
+                ['streams', 'hls', 'dash', 'mp4', 'sources', 'source', 'playlist',
                  'playlist', 'playlistinfo', 'playinfo', 'playsource',
                  'playsources', 'videos', 'video', 'qualities', 'urlinfo']
                     .contains(key);
