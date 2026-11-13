@@ -36,7 +36,7 @@ class Poster extends StatelessWidget {
             ColoredBox(
               color: cs.surfaceContainerHighest,
               child: Center(
-                child: Icon(Icons.movie_creation_rounded,
+                child: Icon(Icons.apps_rounded,
                     size: 38, color: cs.onSurfaceVariant.withValues(alpha: 0.72)),
               ),
             ),
