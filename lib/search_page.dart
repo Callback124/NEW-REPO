@@ -26,6 +26,8 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
   static List<_Group> _savedGroups = const [];
   static List<String> _savedSuggestions = const [];
   static double _savedOffset = 0;
+  static bool _savedHasMore = false;
+  static int _savedPage = 1;
 
   final _ctrl = TextEditingController();
   late final ScrollController _scroll;
@@ -49,6 +51,8 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     _query = _savedQuery;
     _groups = _savedGroups;
     _suggestions = _savedSuggestions;
+    _hasMore = _savedHasMore;
+    _page = _savedPage;
     _scroll = ScrollController(initialScrollOffset: _savedOffset);
     _scroll.addListener(_saveSession);
   }
@@ -57,6 +61,8 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     _savedQuery = _query;
     _savedGroups = _groups;
     _savedSuggestions = _suggestions;
+    _savedHasMore = _hasMore;
+    _savedPage = _page;
     if (_scroll.hasClients) _savedOffset = _scroll.offset;
   }
 
@@ -122,6 +128,8 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
       });
       return;
     }
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    _savedOffset = 0;
     setState(() {
       _query = q;
       _loading = true;
