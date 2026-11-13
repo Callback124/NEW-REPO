@@ -357,19 +357,26 @@ class MovieBoxAdapter extends Adapter {
     if (result.isEmpty) throw ProviderError('MovieBox returned no usable home rows.');
     return result;
   }
-  @override
-  Future<List<Item>> search(ProviderDef p, String query) async {
+  Future<MovieBoxPageResult> searchPage(ProviderDef p, String query, {int page = 1, int perPage = 20}) async {
     final q = query.trim();
-    if (q.isEmpty) return const [];
-    // Official MovieBox search endpoint: POST /subject/search.
-    // Do not send x-client-token and do not fall back to the obsolete GET /search.
+    if (q.isEmpty) return const MovieBoxPageResult([], false);
     final json = await _json('subject/search', method: 'POST',
-        body: {'keyword': q, 'page': 1, 'perPage': 20});
+        body: {'keyword': q, 'page': page, 'perPage': perPage});
     final data = json is Map ? json['data'] : null;
     final raw = data is Map ? (data['items'] ?? data['list'] ?? data['subjectList']) : null;
     final items = raw is List ? raw : const <dynamic>[];
-    return items.whereType<Map>().map((x) => _item(p, x)).where((x) => x.id.isNotEmpty).toList();
+    final pager = data is Map && data['pager'] is Map ? data['pager'] as Map : const {};
+    final hasMore = pager['hasMore'] == true || pager['hasMore'].toString() == 'true' ||
+        (items.length == perPage && pager.isEmpty);
+    return MovieBoxPageResult(
+      items.whereType<Map>().map((x) => _item(p, x)).where((x) => x.id.isNotEmpty).toList(),
+      hasMore,
+    );
   }
+
+  @override
+  Future<List<Item>> search(ProviderDef p, String query) async =>
+      (await searchPage(p, query)).items;
 
   Future<List<String>> suggestions(String query) async {
     final q = query.trim();
