@@ -19,18 +19,16 @@ class HomePage extends StatelessWidget {
           slivers: [
             SliverAppBar(
               floating: true,
-              title: Text.rich(TextSpan(children: [
-                const TextSpan(
-                    text: 'stratus', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.5)),
-                TextSpan(
-                    text: '.',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.primary)),
-              ])),
+              title: Text(
+                app.active == 'all'
+                    ? 'All providers'
+                    : (app.enabled.where((p) => p.id == app.active).firstOrNull?.name ?? app.scopeName),
+                style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.3),
+              ),
               actions: [
                 TextButton.icon(
                   onPressed: () => _pickScope(context),
-                  icon: const Icon(Icons.expand_more),
+                  icon: const Icon(Icons.dns_outlined),
                   iconAlignment: IconAlignment.end,
                   label: Text(app.scopeName),
                 ),
