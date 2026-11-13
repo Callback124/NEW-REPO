@@ -178,11 +178,11 @@ class MovieBoxAdapter extends Adapter {
         }
         if (token == null || token.isEmpty) {
           final cookies = response.headers['set-cookie'] ?? '';
-          final match = RegExp(r'(?:^|[,;]\\s*)token=([^;,\\s]+)').firstMatch(cookies);
+          final match = RegExp(r'(?:^|[,;]\s*)token=([^;,\s]+)').firstMatch(cookies);
           token = match?.group(1);
         }
         if ((token == null || token.isEmpty) && response.body.isNotEmpty) {
-          token = RegExp(r'"token"\\s*:\\s*"([^"]+)"')
+          token = RegExp(r'"token"\s*:\s*"([^"]+)"')
                   .firstMatch(response.body)?.group(1) ??
               RegExp(r'token=([A-Za-z0-9._-]+)')
                   .firstMatch(response.body)?.group(1);
