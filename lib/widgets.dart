@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'detail_page.dart';
 import 'models.dart';
+import 'view_more_page.dart';
 
 void toast(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
@@ -127,11 +128,18 @@ class ShelfRow extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-            child: Text(shelf.title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            child: Row(
+              children: [
+                Expanded(child: Text(shelf.title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+                if (shelf.genreTopId != null && shelf.items.isNotEmpty)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => MovieBoxViewMorePage(shelf: shelf))),
+                    child: const Text('View all'),
+                  ),
+              ],
+            ),
           ),
           SizedBox(
             height: w * 1.5 + 54,
