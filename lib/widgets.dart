@@ -17,11 +17,12 @@ void openDetail(BuildContext context, Item item) {
 
 /// Poster with an initial-letter placeholder underneath, so nothing jumps while images load.
 class Poster extends StatelessWidget {
-  const Poster({super.key, required this.url, required this.title, this.progress});
+  const Poster({super.key, required this.url, required this.title, this.progress, this.corner});
 
   final String? url;
   final String title;
   final double? progress;
+  final String? corner;
 
   @override
   Widget build(BuildContext context) {
@@ -35,10 +36,7 @@ class Poster extends StatelessWidget {
           children: [
             ColoredBox(
               color: cs.surfaceContainerHighest,
-              child: Center(
-                child: Icon(Icons.apps_rounded,
-                    size: 38, color: cs.onSurfaceVariant.withValues(alpha: 0.72)),
-              ),
+              child: const SizedBox.expand(),
             ),
             if (isHttp(url))
               CachedNetworkImage(
@@ -47,6 +45,31 @@ class Poster extends StatelessWidget {
                 memCacheWidth: 360,
                 fadeInDuration: const Duration(milliseconds: 120),
                 errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            if (corner != null && corner!.trim().isNotEmpty)
+              Positioned(
+                top: 7,
+                left: 7,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEEEEE).withValues(alpha: 0.70),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    child: Text(
+                      corner!.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF1976D2),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             if (progress != null)
               Positioned(
@@ -87,7 +110,7 @@ class PosterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Poster(url: item.poster, title: item.title, progress: progress),
+          Poster(url: item.poster, title: item.title, progress: progress, corner: item.corner),
           const SizedBox(height: 6),
           Expanded(
             child: Text.rich(
