@@ -144,8 +144,11 @@ class MovieBoxAdapter extends Adapter {
   }
 
   Future<String> _getToken({bool force = false}) async {
-    if (!force) {
-      final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
+    if (force) {
+      await prefs.remove(_tokenKey);
+      await prefs.remove(_tokenTimeKey);
+    } else {
       final saved = prefs.getString(_tokenKey) ?? '';
       final savedAt = prefs.getInt(_tokenTimeKey) ?? 0;
       final age = DateTime.now().millisecondsSinceEpoch - savedAt;
@@ -163,6 +166,7 @@ class MovieBoxAdapter extends Adapter {
     for (final url in [
       _web + '/wefeed-h5api-bff/home?page=1&perPage=1',
       _base + '/home?page=1&perPage=1',
+      _web + '/',
     ]) {
       try {
         final response = await _client.get(Uri.parse(url), headers: _headers())
@@ -185,8 +189,6 @@ class MovieBoxAdapter extends Adapter {
         lastError = ProviderError('Token bootstrap HTTP ' + response.statusCode.toString() + ': x-user/token cookie missing.');
       } catch (e) { lastError = e; }
     }
-    final cached = prefs.getString(_tokenKey) ?? '';
-    if (cached.isNotEmpty) return cached;
     throw ProviderError('MovieBox guest token unavailable. ' + lastError.toString());
   }
 
@@ -304,8 +306,13 @@ class MovieBoxAdapter extends Adapter {
     for (final op in ops.whereType<Map>()) {
       final type = (op['type'] ?? op['moduleType'] ?? '').toString().toUpperCase();
       final banner = op['banner'];
-      final rawItems = (op['subjects'] as List?) ?? (op['items'] as List?) ??
-          (banner is Map ? banner['items'] as List? : null) ?? const [];
+      dynamic rawItems = op['subjects'] ?? op['items'];
+      if (rawItems == null && banner is List) rawItems = banner;
+      if (rawItems == null && banner is Map) {
+        rawItems = banner['subjects'] ?? banner['items'] ?? banner['list'] ?? banner['data'];
+      }
+      if (rawItems == null && type == 'BANNER') rawItems = op['list'] ?? op['data'];
+      if (rawItems is! List) rawItems = const <dynamic>[];
       final items = rawItems.whereType<Map>().map((x) => _item(p, x))
           .where((x) => x.id.isNotEmpty).toList();
       if (items.isEmpty) continue;
@@ -332,13 +339,26 @@ class MovieBoxAdapter extends Adapter {
   }
 
   Future<List<String>> suggestions(String query) async {
-    if (query.trim().isEmpty) return const [];
-    final json = await _json('subject/search-suggest',
-        query: {'keyword': query.trim(), 'perPage': '10'});
-    final data = json['data'];
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    dynamic json;
+    Object? getError;
+    try {
+      json = await _json('subject/search-suggest',
+          query: {'keyword': q, 'perPage': '10'});
+    } catch (e) {
+      getError = e;
+      json = await _json('subject/search-suggest', method: 'POST',
+          body: {'keyword': q, 'perPage': 10});
+    }
+    final data = json is Map ? json['data'] : null;
     final items = data is Map ? (data['items'] as List? ?? const []) : const [];
-    return items.whereType<Map>().map((x) => x['word']?.toString() ?? '')
+    final words = items.whereType<Map>().map((x) => x['word']?.toString() ?? '')
         .where((x) => x.isNotEmpty).toList();
+    if (words.isEmpty && getError != null) {
+      throw ProviderError('MovieBox suggestions failed: $getError');
+    }
+    return words;
   }
 
   Future<MovieBoxPageResult> viewMore(ProviderDef p, String id, {int page = 1, int perPage = 20}) async {
@@ -391,36 +411,53 @@ class MovieBoxAdapter extends Adapter {
 
   @override
   Future<List<Source>> sources(ProviderDef p, Item item, Episode? ep) async {
-    final series = item.subjectType == 2;
+    final series = item.subjectType == 2 || item.type == 'series';
     final se = series ? (ep?.season ?? 1) : 0;
     final number = series ? (ep?.episode ?? 1) : 0;
+    const playerHeaders = {
+      'User-Agent': 'okhttp/4.12.0',
+      'Referer': 'https://movieboxph.org/',
+      'Origin': 'https://movieboxph.org',
+    };
     Future<List<Source>> fetch(int season, int episode) async {
       final json = await _json('subject/play', query: {
         'subjectId': item.id, 'detailPath': item.detailPath ?? '',
         'se': season.toString(), 'ep': episode.toString(),
       });
-      final data = json['data'];
+      final data = json is Map ? json['data'] : null;
       final out = <Source>[];
       if (data is Map) {
-        const playerHeaders = {
-          'User-Agent': 'okhttp/4.12.0',
-          'Referer': 'https://movieboxph.org/',
-          'Origin': 'https://movieboxph.org',
-        };
         for (final stream in (data['streams'] as List? ?? const []).whereType<Map>()) {
-          out.add(Source.clean(name: (stream['resolutions'] ?? 'Auto').toString() +
-              ' · ' + (stream['format'] ?? 'MP4').toString(),
-              url: stream['url']?.toString(), headers: playerHeaders));
+          final url = (stream['url'] ?? stream['playUrl'] ?? stream['link'])?.toString();
+          if (url != null && url.isNotEmpty) {
+            out.add(Source.clean(name: (stream['resolutions'] ?? stream['resolution'] ?? 'Auto').toString() +
+                ' · ' + (stream['format'] ?? 'MP4').toString(), url: url, headers: playerHeaders));
+          }
         }
         for (final stream in (data['hls'] as List? ?? const []).whereType<Map>()) {
-          out.add(Source.clean(name: (stream['resolutions'] ?? 'Auto').toString() + ' · HLS',
-              url: stream['url']?.toString(), headers: playerHeaders));
+          final url = (stream['url'] ?? stream['playUrl'] ?? stream['link'])?.toString();
+          if (url != null && url.isNotEmpty) {
+            out.add(Source.clean(name: (stream['resolutions'] ?? stream['resolution'] ?? 'Auto').toString() +
+                ' · HLS', url: url, headers: playerHeaders));
+          }
         }
       }
       return out.where((x) => x.playable).toList();
     }
-    var streams = await fetch(se, number);
-    if (streams.isEmpty) streams = await fetch(se == 0 ? 1 : 0, number == 0 ? 1 : 0);
+    Object? firstError;
+    var streams = <Source>[];
+    try { streams = await fetch(se, number); } catch (e) { firstError = e; }
+    if (streams.isEmpty) {
+      try { streams = await fetch(se == 0 ? 1 : 0, number == 0 ? 1 : 0); }
+      catch (e) { firstError ??= e; }
+    }
+    if (streams.isEmpty && firstError != null) {
+      throw ProviderError('MovieBox playback request failed: $firstError');
+    }
+    if (streams.isEmpty) {
+      throw ProviderError('MovieBox returned no MP4/HLS sources. subjectId=' + item.id +
+          ', detailPath=' + (item.detailPath ?? 'missing') + '.');
+    }
     return streams;
   }
 }
