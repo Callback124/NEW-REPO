@@ -193,9 +193,16 @@ class _DownloadPageState extends State<DownloadPage> {
   }
 
   Future<void> _startDownloads() async {
-    final selected = _series
-        ? _visibleChoices.where((e) => _selected.contains(_choiceKey(e))).toList()
-        : _visibleChoices.take(1).toList();
+    final selected = <_DownloadChoice>[];
+    if (_series) {
+      final unique = <String, _DownloadChoice>{};
+      for (final choice in _visibleChoices) {
+        if (_selected.contains(_choiceKey(choice))) unique.putIfAbsent(_choiceKey(choice), () => choice);
+      }
+      selected.addAll(unique.values);
+    } else {
+      selected.addAll(_visibleChoices.take(1));
+    }
     if (selected.isEmpty) return;
     setState(() => _queueing = true);
     try {
