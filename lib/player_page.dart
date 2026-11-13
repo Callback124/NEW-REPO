@@ -79,13 +79,14 @@ class _PlayerPageState extends State<PlayerPage> {
       final l = await getSources(_item, _ep);
       if (!mounted || gen != _gen) return;
       _srcs = l;
-      final ok = l.where((s) => s.playable).toList()
+      final ok = l.where((s) =>
+          s.playable && (_sourceResolution(s) == 0 || _sourceResolution(s) <= 1080)).toList()
         ..sort((a, b) => _sourceResolution(b).compareTo(_sourceResolution(a)));
       if (l.isEmpty) {
         setState(() => _msg = 'No sources were returned by MovieBox for this episode.');
       } else if (ok.isEmpty) {
         setState(() {
-          _msg = 'None of these sources can play in the app.';
+          _msg = 'No supported source found. This device supports up to 1080p; 4K/above streams exceed its decoder capabilities.';
           _showPickInMsg = true;
         });
       } else {
@@ -202,8 +203,10 @@ class _PlayerPageState extends State<PlayerPage> {
       for (final s in _srcs)
         ListTile(
           title: Text(s.name),
-          subtitle: s.note != null ? Text(s.note!) : null,
-          enabled: s.playable || s.link != null,
+          subtitle: _sourceResolution(s) > 1080
+              ? const Text('Above 1080p · Not supported on this device')
+              : (s.note != null ? Text(s.note!) : null),
+          enabled: (s.playable && (_sourceResolution(s) == 0 || _sourceResolution(s) <= 1080)) || s.link != null,
           trailing: _cur == s
               ? const Icon(Icons.check)
               : (s.link != null ? const Icon(Icons.open_in_new, size: 18) : null),
