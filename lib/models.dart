@@ -80,6 +80,7 @@ class Item {
     this.sources = const [],
     this.detailPath,
     this.subjectType,
+    this.corner,
     this.dubs = const [],
   });
 
@@ -97,6 +98,7 @@ class Item {
   final List<Source> sources;
   final String? detailPath;
   final int? subjectType;
+  final String? corner;
   final List<DubOption> dubs;
 
   String get key => '$pid|$id';
@@ -114,6 +116,7 @@ class Item {
     List<Source>? sources,
     String? detailPath,
     int? subjectType,
+    String? corner,
     List<DubOption>? dubs,
   }) =>
       Item(
@@ -131,6 +134,7 @@ class Item {
         sources: sources ?? this.sources,
         detailPath: detailPath ?? this.detailPath,
         subjectType: subjectType ?? this.subjectType,
+        corner: corner ?? this.corner,
         dubs: dubs ?? this.dubs,
       );
 
@@ -144,6 +148,7 @@ class Item {
         'plot': (plot ?? '').length > 400 ? plot!.substring(0, 400) : plot,
         'detailPath': detailPath,
         'subjectType': subjectType,
+        'corner': corner,
       };
 
   factory Item.fromJson(Map<String, dynamic> j) => Item(
@@ -156,6 +161,7 @@ class Item {
         plot: j['plot']?.toString(),
         detailPath: j['detailPath']?.toString(),
         subjectType: (j['subjectType'] as num?)?.toInt(),
+        corner: j['corner']?.toString(),
       );
 }
 
