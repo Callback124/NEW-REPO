@@ -121,6 +121,16 @@ class DownloadService extends ChangeNotifier {
 
   Future<void> cancel(int id) async {
     await _channel.invokeMethod<bool>('cancel', {'id': id});
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    if (raw != null) {
+      final list = (jsonDecode(raw) as List)
+          .map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      for (final entry in list) {
+        if (entry['id'] == id) entry['status'] = 'cancelled';
+      }
+      await prefs.setString(_key, jsonEncode(list));
+    }
     await refresh();
   }
 
