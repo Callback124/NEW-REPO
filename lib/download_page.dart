@@ -44,10 +44,12 @@ class _DownloadPageState extends State<DownloadPage> {
     values.sort((a, b) => _qualityRank(b).compareTo(_qualityRank(a)));
     return values;
   }
-  List<_DownloadChoice> get _visibleChoices => _choices.where((e) =>
-      e.quality == _quality &&
-      (!_series || (e.episode != null && e.episode.season == _season &&
-        e.episode.episode > _rangeStart && e.episode.episode <= _rangeStart + 100))).toList();
+  List<_DownloadChoice> get _visibleChoices => _choices.where((e) {
+    final ep = e.episode;
+    return e.quality == _quality &&
+        (!_series || (ep != null && ep.season == _season &&
+          ep.episode > _rangeStart && ep.episode <= _rangeStart + 100));
+  }).toList();
 
   @override
   void initState() {
@@ -156,7 +158,7 @@ class _DownloadPageState extends State<DownloadPage> {
   String _safe(String s) => s.replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_').replaceAll(RegExp(r'_+'), '_');
 
   Future<void> _selectDub(DubOption dub) async {
-    setState(() { _loading = true; _quality = null; _choices = []; _selected.clear(); _sizes.clear(); });
+    setState(() { _loading = true; _quality = null; _choices = []; _selected.clear(); });
     try {
       final next = _item.copyWith(id: dub.subjectId, detailPath: dub.detailPath);
       _item = await detailOf(next);
@@ -204,7 +206,7 @@ class _DownloadPageState extends State<DownloadPage> {
     try {
       for (final c in selected) {
         final epLabel = c.episode == null ? '' : '_S${c.episode!.season.toString().padLeft(2, '0')}E${c.episode!.episode.toString().padLeft(2, '0')}';
-        final file = '${_safe(_item.title)}$epLabel_${_safe(c.quality)}.mp4';
+        final file = '${_safe(_item.title)}${epLabel}_${_safe(c.quality)}.mp4';
         await DownloadService.instance.enqueue(
           url: c.source.url!,
           title: '${_item.title}${c.episode == null ? '' : ' · ${c.episode!.label}'} · ${c.quality}',
