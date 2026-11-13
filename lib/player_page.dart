@@ -24,7 +24,6 @@ class PlayerPage extends StatefulWidget {
 
 class _PlayerPageState extends State<PlayerPage> {
   VideoPlayerController? _player;
-  final List<StreamSubscription<dynamic>> _subs = [];
 
   late Episode? _ep = widget.ep;
   List<Source> _srcs = const [];
@@ -63,52 +62,6 @@ class _PlayerPageState extends State<PlayerPage> {
     if (_ep == null) return null;
     final i = widget.list.indexWhere((e) => e.id == _ep!.id);
     return i >= 0 && i + 1 < widget.list.length ? widget.list[i + 1] : null;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    _subs.add(_player.stream.duration.listen((d) {
-      if (_startAt != null && d > Duration.zero) {
-        _player.seek(_startAt!);
-        _startAt = null;
-      }
-    }));
-    _subs.add(_player.stream.position.listen((pos) {
-      final d = _player.state.duration;
-      final now = DateTime.now();
-      if (d.inSeconds > 0 && pos.inSeconds > 1 && now.difference(_lastSave).inSeconds >= 5) {
-        _lastSave = now;
-        app.setProgress(widget.item, _ep, pos.inSeconds.toDouble(), d.inSeconds.toDouble());
-      }
-    }));
-    _subs.add(_player.stream.playing.listen((p) {
-      if (!mounted) return;
-      if (p && _msg != null) setState(() => _msg = null);
-      _kick();
-    }));
-    _subs.add(_player.stream.completed.listen((done) {
-      if (!done || !mounted) return;
-      final d = _player.state.duration.inSeconds.toDouble();
-      if (d > 0) app.setProgress(widget.item, _ep, d, d);
-      setState(() => _ended = true);
-    }));
-    _subs.add(_player.stream.error.listen((e) {
-      if (e.isEmpty || !mounted) return;
-      setState(() {
-        _msg = 'This source could not be played. Try another one.';
-        _showPickInMsg = true;
-      });
-    }));
-    _subs.add(_player.stream.track.listen((_) {
-      if (mounted) setState(() {});
-    }));
-    _setup();
   }
 
   /* ---- sources ---- */
@@ -279,9 +232,9 @@ class _PlayerPageState extends State<PlayerPage> {
     _hideTimer?.cancel();
     if (!mounted) return;
     if (!_visible) setState(() => _visible = true);
-    if (_player.state.playing) {
+    if (_player?.value.isPlaying ?? false) {
       _hideTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted && _player.state.playing) setState(() => _visible = false);
+        if (mounted && (_player?.value.isPlaying ?? false)) setState(() => _visible = false);
       });
     }
   }
@@ -537,8 +490,11 @@ class _PlayerPageState extends State<PlayerPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AnimatedBuilder(
-          animation: _player ?? ValueNotifier(false),
+        if (_player == null)
+          Row(children: [const SizedBox(width: 50), Expanded(child: Container(height: 3, color: Colors.white24)), const SizedBox(width: 56)])
+        else
+          AnimatedBuilder(
+          animation: _player!,
           builder: (context, _) {
             final value = _player?.value;
             final pos = value?.position ?? Duration.zero;
