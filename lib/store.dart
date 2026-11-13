@@ -22,8 +22,11 @@ class AppState extends ChangeNotifier {
   Future<void> init() async {
     _sp = await SharedPreferences.getInstance();
     providers = _readList('providers').map(ProviderDef.fromJson).toList();
-    if (!providers.any((p) => p.id == 'archive')) {
-      providers.insert(0, ProviderDef.archive());
+    // Remove the retired Internet Archive provider and migrate to MovieBox.
+    providers = providers.where((p) => p.id != 'archive' && p.kind != 'archive').toList();
+    if (!providers.any((p) => p.id == 'moviebox')) {
+      providers.insert(0, ProviderDef.moviebox());
+      _saveProviders();
     }
     library = _readList('library').map(Item.fromJson).toList();
     progress = {};
