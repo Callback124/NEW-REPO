@@ -28,6 +28,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
   bool _loading = false;
   String _query = '';
   List<_Group> _groups = const [];
+  List<String> _suggestions = const [];
 
   @override
   bool get wantKeepAlive => true;
@@ -41,7 +42,32 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
 
   void _onChanged(String v) {
     _debounce?.cancel();
+    _loadSuggestions(v);
     _debounce = Timer(const Duration(milliseconds: 350), () => _search(v));
+  }
+
+  Future<void> _loadSuggestions(String raw) async {
+    final q = raw.trim();
+    if (q.length < 2) {
+      if (mounted) setState(() => _suggestions = const []);
+      return;
+    }
+    final providers = app.scope().where((p) => p.kind == 'moviebox').toList();
+    if (providers.isEmpty) return;
+    try {
+      final values = await MovieBoxAdapter().suggestions(q);
+      if (!mounted || _ctrl.text.trim() != q) return;
+      setState(() => _suggestions = values.take(8).toList());
+    } catch (_) {
+      if (mounted) setState(() => _suggestions = const []);
+    }
+  }
+
+  void _useSuggestion(String value) {
+    _ctrl.text = value;
+    _ctrl.selection = TextSelection.collapsed(offset: value.length);
+    setState(() => _suggestions = const []);
+    _search(value);
   }
 
   Future<void> _search(String raw) async {
@@ -51,6 +77,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
       setState(() {
         _query = '';
         _groups = const [];
+        _suggestions = const [];
         _loading = false;
       });
       return;
@@ -101,6 +128,24 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
             ),
           ),
         ),
+        if (_suggestions.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final suggestion in _suggestions)
+                    ActionChip(
+                      avatar: const Icon(Icons.search, size: 16),
+                      label: Text(suggestion),
+                      onPressed: () => _useSuggestion(suggestion),
+                    ),
+                ],
+              ),
+            ),
+          ),
         if (_loading)
           const SliverToBoxAdapter(child: Padding(
               padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()))
