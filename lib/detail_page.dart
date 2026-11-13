@@ -157,6 +157,7 @@ class _DetailPageState extends State<DetailPage> {
                         children: [
                           for (final dub in d.dubs)
                             ChoiceChip(
+                              showCheckmark: false,
                               label: Text(dub.language + (dub.original ? ' · Original' : '')),
                               selected: dub.detailPath == d.detailPath,
                               onSelected: (_) => _selectDub(dub),
