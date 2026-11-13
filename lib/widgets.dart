@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'detail_page.dart';
 import 'models.dart';
@@ -44,6 +45,14 @@ class Poster extends StatelessWidget {
                 fit: BoxFit.cover,
                 memCacheWidth: 360,
                 fadeInDuration: const Duration(milliseconds: 120),
+                placeholder: (_, __) => Center(
+                  child: SvgPicture.network(
+                    'https://h5-static.aoneroom.com/ssrStatic/mbOfficial/public/_nuxt/image-1.apJjVir2.svg',
+                    width: 42,
+                    height: 42,
+                    placeholderBuilder: (_) => const SizedBox(width: 42, height: 42),
+                  ),
+                ),
                 errorWidget: (_, __, ___) => const SizedBox.shrink(),
               ),
             if (corner != null && corner!.trim().isNotEmpty)
