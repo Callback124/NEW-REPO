@@ -1,0 +1,226 @@
+import 'package:flutter/material.dart';
+
+import 'models.dart';
+import 'player_page.dart';
+import 'providers.dart';
+import 'store.dart';
+import 'widgets.dart';
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: app,
+      builder: (context, _) {
+        final ps = app.scope();
+        return CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              floating: true,
+              title: Text.rich(TextSpan(children: [
+                const TextSpan(
+                    text: 'stratus', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.5)),
+                TextSpan(
+                    text: '.',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.primary)),
+              ])),
+              actions: [
+                TextButton.icon(
+                  onPressed: () => _pickScope(context),
+                  icon: const Icon(Icons.expand_more),
+                  iconAlignment: IconAlignment.end,
+                  label: Text(app.scopeName),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+            const SliverToBoxAdapter(child: _ContinueWatching()),
+            if (ps.isEmpty)
+              SliverToBoxAdapter(
+                child: EmptyState(
+                  title: 'No providers are turned on',
+                  text: 'Turn one on, or add a new provider in Settings.',
+                ),
+              )
+            else
+              SliverList.builder(
+                itemCount: ps.length,
+                itemBuilder: (context, i) => _ProviderSection(
+                  key: ValueKey(ps[i].id),
+                  provider: ps[i],
+                  showName: ps.length > 1,
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          ],
+        );
+      },
+    );
+  }
+
+  void _pickScope(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            RadioListTile<String>(
+              value: 'all',
+              groupValue: app.active,
+              title: const Text('All providers'),
+              onChanged: (v) {
+                app.setActive('all');
+                Navigator.pop(ctx);
+              },
+            ),
+            for (final p in app.enabled)
+              RadioListTile<String>(
+                value: p.id,
+                groupValue: app.active,
+                title: Text(p.name),
+                subtitle: Text(p.kindLabel),
+                onChanged: (v) {
+                  app.setActive(p.id);
+                  Navigator.pop(ctx);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderSection extends StatefulWidget {
+  const _ProviderSection({super.key, required this.provider, required this.showName});
+  final ProviderDef provider;
+  final bool showName;
+
+  @override
+  State<_ProviderSection> createState() => _ProviderSectionState();
+}
+
+class _ProviderSectionState extends State<_ProviderSection> {
+  late Future<List<Shelf>> _f;
+
+  @override
+  void initState() {
+    super.initState();
+    _f = adapterFor(widget.provider).home(widget.provider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.provider;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.showName) ProviderHeader(p.name),
+        FutureBuilder<List<Shelf>>(
+          future: _f,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Column(children: [ShelfSkeleton(), ShelfSkeleton()]);
+            }
+            if (snap.hasError) {
+              return ErrorNote(
+                name: p.name,
+                error: snap.error!,
+                onRetry: () =>
+                    setState(() => _f = adapterFor(p).home(p)),
+              );
+            }
+            final shelves = snap.data ?? const [];
+            if (shelves.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Text('${p.name} has no home catalogs. Try Search.'),
+              );
+            }
+            return Column(children: [for (final s in shelves) ShelfRow(shelf: s)]);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _ContinueWatching extends StatelessWidget {
+  const _ContinueWatching();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: app.progressRev,
+      builder: (context, _, __) {
+        final rs = app.resumables;
+        if (rs.isEmpty) return const SizedBox.shrink();
+        final w = cardWidth(context);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Text('Continue watching',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              SizedBox(
+                height: w * 1.5 + 54,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: rs.length,
+                  itemExtent: w + 12,
+                  itemBuilder: (context, i) {
+                    final pr = rs[i].value;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: PosterCard(
+                        item: pr.item,
+                        progress: pr.frac,
+                        subtitle: pr.ep != null
+                            ? pr.ep!.label
+                            : '${((pr.d - pr.t) / 60).ceil().clamp(1, 9999)} min left',
+                        onTap: () => resumeProgress(context, pr),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+Future<void> resumeProgress(BuildContext context, Progress pr) async {
+  final nav = Navigator.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
+      const SnackBar(content: Text('Loading…'), duration: Duration(seconds: 1)));
+  try {
+    final full = await detailOf(pr.item);
+    Episode? ep;
+    if (pr.ep != null) {
+      for (final e in full.episodes) {
+        if (e.id == pr.ep!.id) ep = e;
+      }
+    }
+    nav.push(MaterialPageRoute(
+        builder: (_) => PlayerPage(item: full, ep: ep, list: full.episodes)));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+  }
+}

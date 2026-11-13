@@ -1,0 +1,44 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # The repo only holds lib/ and pubspec.yaml, so generate the Android shell here.
+      - name: Generate Android project
+        run: |
+          flutter create --org app.stratus --project-name stratus --platforms=android /tmp/shell
+          cp -r /tmp/shell/android ./android
+          cp /tmp/shell/.metadata ./.metadata
+
+      - name: Allow network access
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application android:usesCleartextTraffic="true"#' "$MANIFEST"
+          grep -n "INTERNET\|usesCleartextTraffic" "$MANIFEST"
+
+      - run: flutter pub get
+
+      - run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stratus-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
