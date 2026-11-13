@@ -537,56 +537,80 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Widget _centerRow(BuildContext context) {
-    final gap = MediaQuery.sizeOf(context).width * 0.08;
     final previous = _previous;
     final next = _next;
     final hasEpisodeNavigation = _episodes.length > 1 && _ep != null;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (hasEpisodeNavigation)
-          IconButton(
-            color: previous == null ? Colors.white24 : Colors.white70,
-            iconSize: 42,
-            icon: const Icon(Icons.skip_previous_rounded),
-            tooltip: 'Previous episode',
-            onPressed: previous == null ? null : _playPrevious,
-          ),
-        IconButton(
-          color: Colors.white70, iconSize: 50, icon: const Icon(Icons.replay_10),
-          tooltip: 'Back 10 seconds', onPressed: () => _skip(-10),
-        ),
-        SizedBox(width: gap),
-        if (_buffering)
-          const SizedBox(width: 68, height: 68,
-              child: Padding(padding: EdgeInsets.all(18),
-                  child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white)))
-        else
-          IconButton(
-            color: Colors.white, iconSize: 68,
-            icon: Icon((_player?.value.isPlaying ?? false)
-                ? Icons.pause_rounded : Icons.play_arrow_rounded),
-            tooltip: (_player?.value.isPlaying ?? false) ? 'Pause' : 'Play',
-            onPressed: () {
-              final c = _player;
-              if (c == null) return;
-              c.value.isPlaying ? c.pause() : c.play();
-            },
-          ),
-        SizedBox(width: gap),
-        IconButton(
-          color: Colors.white70, iconSize: 50, icon: const Icon(Icons.forward_10),
-          tooltip: 'Forward 10 seconds', onPressed: () => _skip(10),
-        ),
-        if (hasEpisodeNavigation)
-          IconButton(
-            color: next == null ? Colors.white24 : Colors.white70,
-            iconSize: 42,
-            icon: const Icon(Icons.skip_next_rounded),
-            tooltip: 'Next episode',
-            onPressed: next == null ? null : _playNext,
-          ),
-      ],
+    Widget slot(Widget child) => Expanded(
+      child: Center(child: child),
+    );
+    Widget smallControl({
+      required IconData icon,
+      required String tooltip,
+      required VoidCallback? onPressed,
+      Color color = Colors.white70,
+    }) => IconButton(
+      constraints: const BoxConstraints.tightFor(width: 52, height: 56),
+      padding: EdgeInsets.zero,
+      color: color,
+      iconSize: 38,
+      icon: Icon(icon),
+      tooltip: tooltip,
+      onPressed: onPressed,
+    );
+
+    return SizedBox(
+      width: double.infinity,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          if (hasEpisodeNavigation)
+            slot(smallControl(
+              icon: Icons.skip_previous_rounded,
+              tooltip: 'Previous episode',
+              color: previous == null ? Colors.white24 : Colors.white,
+              onPressed: previous == null ? null : _playPrevious,
+            )),
+          slot(smallControl(
+            icon: Icons.replay_10_rounded,
+            tooltip: 'Back 10 seconds',
+            onPressed: () => _skip(-10),
+          )),
+          slot(_buffering
+              ? const SizedBox(
+                  width: 68, height: 68,
+                  child: Padding(
+                    padding: EdgeInsets.all(18),
+                    child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                  ),
+                )
+              : IconButton(
+                  constraints: const BoxConstraints.tightFor(width: 72, height: 72),
+                  padding: EdgeInsets.zero,
+                  color: Colors.white,
+                  iconSize: 68,
+                  icon: Icon((_player?.value.isPlaying ?? false)
+                      ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                  tooltip: (_player?.value.isPlaying ?? false) ? 'Pause' : 'Play',
+                  onPressed: () {
+                    final c = _player;
+                    if (c == null) return;
+                    c.value.isPlaying ? c.pause() : c.play();
+                  },
+                )),
+          slot(smallControl(
+            icon: Icons.forward_10_rounded,
+            tooltip: 'Forward 10 seconds',
+            onPressed: () => _skip(10),
+          )),
+          if (hasEpisodeNavigation)
+            slot(smallControl(
+              icon: Icons.skip_next_rounded,
+              tooltip: 'Next episode',
+              color: next == null ? Colors.white24 : Colors.white,
+              onPressed: next == null ? null : _playNext,
+            )),
+        ],
+      ),
     );
   }
 
