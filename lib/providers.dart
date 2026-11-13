@@ -115,6 +115,12 @@ Future<List<Source>> getSources(Item item, Episode? ep) async {
 
 /* ---------- MovieBox built-in provider ---------- */
 
+class MovieBoxPageResult {
+  const MovieBoxPageResult(this.items, this.hasMore);
+  final List<Item> items;
+  final bool hasMore;
+}
+
 class MovieBoxAdapter extends Adapter {
   static const _base = 'https://h5-api.aoneroom.com/wefeed-h5api-bff';
   static const _web = 'https://movieboxph.org';
@@ -335,12 +341,17 @@ class MovieBoxAdapter extends Adapter {
         .where((x) => x.isNotEmpty).toList();
   }
 
-  Future<List<Item>> viewMore(ProviderDef p, String id, {int page = 1, int perPage = 20}) async {
+  Future<MovieBoxPageResult> viewMore(ProviderDef p, String id, {int page = 1, int perPage = 20}) async {
     final json = await _json('ranking-list/content',
         query: {'id': id, 'page': page.toString(), 'perPage': perPage.toString()});
     final data = json['data'];
     final items = data is Map ? (data['subjectList'] as List? ?? const []) : const [];
-    return items.whereType<Map>().map((x) => _item(p, x)).where((x) => x.id.isNotEmpty).toList();
+    final pager = data is Map && data['pager'] is Map ? data['pager'] as Map : const {};
+    final hasMore = pager['hasMore'] == true || pager['hasMore'].toString() == 'true';
+    return MovieBoxPageResult(
+      items.whereType<Map>().map((x) => _item(p, x)).where((x) => x.id.isNotEmpty).toList(),
+      hasMore,
+    );
   }
 
   @override
