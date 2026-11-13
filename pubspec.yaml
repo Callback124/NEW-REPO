@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  crypto: ^3.0.6
   shared_preferences: ^2.3.2
   cached_network_image: ^3.4.1
   url_launcher: ^6.3.0
