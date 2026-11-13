@@ -23,9 +23,13 @@ class SearchPage extends StatefulWidget {
 
 class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMixin {
   final _ctrl = TextEditingController();
+  final _scroll = ScrollController();
   Timer? _debounce;
   int _token = 0;
   bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
   String _query = '';
   List<_Group> _groups = const [];
   List<String> _suggestions = const [];
@@ -36,6 +40,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
   @override
   void dispose() {
     _debounce?.cancel();
+    _scroll.dispose();
     _ctrl.dispose();
     super.dispose();
   }
@@ -43,7 +48,6 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
   void _onChanged(String v) {
     _debounce?.cancel();
     _loadSuggestions(v);
-    _debounce = Timer(const Duration(milliseconds: 350), () => _search(v));
   }
 
   Future<void> _loadSuggestions(String raw) async {
@@ -85,10 +89,21 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     setState(() {
       _query = q;
       _loading = true;
+      _loadingMore = false;
+      _page = 1;
+      _hasMore = false;
     });
     final ps = app.scope();
     final groups = await Future.wait(ps.map((p) async {
       try {
+        if (p.kind == 'moviebox') {
+          final page = await MovieBoxAdapter().searchPage(p, q);
+          if (mounted && my == _token) {
+            _page = 1;
+            _hasMore = page.hasMore;
+          }
+          return _Group(p, page.items, null);
+        }
         return _Group(p, await adapterFor(p).search(p, q), null);
       } catch (e) {
         return _Group(p, const [], e);
@@ -101,6 +116,39 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     });
   }
 
+  void _onScroll() {
+    if (!_scroll.hasClients || _loading || _loadingMore || !_hasMore || _query.isEmpty) return;
+    if (_scroll.position.extentAfter < 500) _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    final p = app.scope().where((x) => x.kind == 'moviebox').firstOrNull;
+    if (p == null) return;
+    setState(() => _loadingMore = true);
+    try {
+      final next = await MovieBoxAdapter().searchPage(p, _query, page: _page + 1);
+      if (!mounted) return;
+      final idx = _groups.indexWhere((g) => g.provider.id == p.id);
+      if (idx >= 0) {
+        final updated = [..._groups];
+        final old = updated[idx];
+        final seen = old.items.map((x) => x.id).toSet();
+        updated[idx] = _Group(p, [...old.items, ...next.items.where((x) => !seen.contains(x.id))], null);
+        setState(() {
+          _groups = updated;
+          _page++;
+          _hasMore = next.hasMore;
+          _loadingMore = false;
+        });
+      } else {
+        setState(() => _loadingMore = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingMore = false);
+      if (mounted) toast(context, 'Could not load more results: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -108,7 +156,11 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     final nothing = !_loading &&
         _query.isNotEmpty &&
         _groups.every((g) => g.error == null && g.items.isEmpty);
-    return CustomScrollView(
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) { if (n is ScrollUpdateNotification || n is ScrollMetricsNotification) _onScroll(); return false; },
+      child: CustomScrollView(
+      key: const PageStorageKey<String>('movie-search-results'),
+      controller: _scroll,
       slivers: [
         SliverAppBar(
           floating: true,
@@ -120,7 +172,6 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               hintText: 'Search movies and shows',
-              prefixIcon: const Icon(Icons.search),
               filled: true,
               contentPadding: EdgeInsets.zero,
               border: OutlineInputBorder(
@@ -128,7 +179,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
             ),
           ),
         ),
-        if (_suggestions.isNotEmpty)
+        if (_suggestions.isNotEmpty && _query.isEmpty)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -153,7 +204,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
           const SliverToBoxAdapter(
               child: EmptyState(
                   title: 'Search your providers',
-                  text: 'Results are grouped by provider.'))
+                  text: 'Type to see suggestions, then press Enter or select a suggestion.'))
         else if (nothing)
           SliverToBoxAdapter(
               child: EmptyState(
@@ -171,7 +222,11 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
             else
               PosterGrid(items: g.items),
           ],
+        if (_loadingMore)
+          const SliverToBoxAdapter(child: Padding(
+            padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))),
       ],
+    ),
     );
   }
 }
