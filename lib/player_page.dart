@@ -302,6 +302,8 @@ class _PlayerPageState extends State<PlayerPage> {
   Future<void> _switchDub(DubOption dub) async {
     if (dub.subjectId == _item.id && dub.detailPath == _item.detailPath) return;
     final previous = _player?.value.position ?? Duration.zero;
+    final previousSeason = _ep?.season;
+    final previousEpisode = _ep?.episode;
     final current = _item.copyWith(id: dub.subjectId, detailPath: dub.detailPath);
     setState(() {
       _item = current;
@@ -317,7 +319,11 @@ class _PlayerPageState extends State<PlayerPage> {
       setState(() {
         _item = fresh;
         _episodes = fresh.episodes;
-        _ep = fresh.episodes.isEmpty ? null : fresh.episodes.first;
+        _ep = fresh.episodes.isEmpty
+            ? null
+            : fresh.episodes.cast<Episode?>().firstWhere(
+                (e) => e!.season == previousSeason && e.episode == previousEpisode,
+                orElse: () => fresh.episodes.first);
       });
       await _setup();
       if (previous > Duration.zero && _player?.value.isInitialized == true) {
