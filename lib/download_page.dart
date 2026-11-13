@@ -134,10 +134,18 @@ class _DownloadPageState extends State<DownloadPage> {
     } catch (_) {}
     try {
       final response = await http.get(Uri.parse(source.url!), headers: {
-        ...source.headers, 'Range': 'bytes=0-0',
+        ...source.headers,
+        'Range': 'bytes=0-0',
       }).timeout(const Duration(seconds: 10));
       final range = response.headers['content-range'];
-      final total = range == null ? null : int.tryParse(RegExp(r'/([0-9]+)
+      if (range != null && range.contains('/')) {
+        final total = int.tryParse(range.substring(range.lastIndexOf('/') + 1));
+        if (total != null && total > 0) return total;
+      }
+      final length = int.tryParse(response.headers['content-length'] ?? '');
+      if (length != null && length > 1) return length;
+    } catch (_) {}
+    return -1;
   }
 
   Future<void> _loadSizes() async {
