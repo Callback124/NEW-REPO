@@ -138,7 +138,6 @@ class _DownloadPageState extends State<DownloadPage> {
         if (index >= matching.length) return;
         final choice = matching[index];
         final size = await _getSize(choice.source);
-        final key = _choiceKey(choice);
         final pos = _choices.indexOf(choice);
         if (pos >= 0) _choices[pos] = _DownloadChoice(choice.episode, choice.source, choice.quality, size);
       }
