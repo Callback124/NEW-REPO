@@ -9,12 +9,13 @@ bool isHttp(String? u) =>
     u != null && (u.startsWith('http://') || u.startsWith('https://'));
 
 class Source {
-  const Source({required this.name, this.url, this.link, this.note});
+  const Source({required this.name, this.url, this.link, this.note, this.headers = const {}});
 
   final String name;
   final String? url;
   final String? link;
   final String? note;
+  final Map<String, String> headers;
 
   /// Builds a source and drops anything that is not an http(s) link.
   factory Source.clean({
@@ -22,12 +23,14 @@ class Source {
     String? url,
     String? link,
     String? note,
+    Map<String, String> headers = const {},
   }) =>
       Source(
         name: name.isEmpty ? 'Source' : name,
         url: isHttp(url) ? url : null,
         link: isHttp(link) ? link : null,
         note: note ?? ((url != null && !isHttp(url)) ? 'Invalid link' : null),
+        headers: headers,
       );
 
   bool get playable => url != null;
@@ -76,6 +79,8 @@ class Item {
     this.episodes = const [],
     this.sources = const [],
     this.detailPath,
+    this.subjectType,
+    this.dubs = const [],
   });
 
   final String pid;
@@ -91,6 +96,8 @@ class Item {
   final List<Episode> episodes;
   final List<Source> sources;
   final String? detailPath;
+  final int? subjectType;
+  final List<DubOption> dubs;
 
   String get key => '$pid|$id';
 
@@ -105,6 +112,8 @@ class Item {
     List<Episode>? episodes,
     List<Source>? sources,
     String? detailPath,
+    int? subjectType,
+    List<DubOption>? dubs,
   }) =>
       Item(
         pid: pid,
@@ -120,6 +129,8 @@ class Item {
         episodes: episodes ?? this.episodes,
         sources: sources ?? this.sources,
         detailPath: detailPath ?? this.detailPath,
+        subjectType: subjectType ?? this.subjectType,
+        dubs: dubs ?? this.dubs,
       );
 
   Map<String, dynamic> toJson() => {
@@ -131,6 +142,7 @@ class Item {
         'year': year,
         'plot': (plot ?? '').length > 400 ? plot!.substring(0, 400) : plot,
         'detailPath': detailPath,
+        'subjectType': subjectType,
       };
 
   factory Item.fromJson(Map<String, dynamic> j) => Item(
@@ -142,6 +154,7 @@ class Item {
         year: j['year']?.toString(),
         plot: j['plot']?.toString(),
         detailPath: j['detailPath']?.toString(),
+        subjectType: (j['subjectType'] as num?)?.toInt(),
       );
 }
 
@@ -179,9 +192,18 @@ class Progress {
 }
 
 class Shelf {
-  const Shelf(this.title, this.items);
+  const Shelf(this.title, this.items, {this.genreTopId});
   final String title;
   final List<Item> items;
+  final String? genreTopId;
+}
+
+class DubOption {
+  const DubOption({required this.subjectId, required this.language, required this.detailPath, this.original = false});
+  final String subjectId;
+  final String language;
+  final String detailPath;
+  final bool original;
 }
 
 class ProviderDef {
