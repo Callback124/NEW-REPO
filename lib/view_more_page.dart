@@ -58,6 +58,9 @@ class _MovieBoxViewMorePageState extends State<MovieBoxViewMorePage> {
         _page++;
         _loading = false;
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onScroll();
+      });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
