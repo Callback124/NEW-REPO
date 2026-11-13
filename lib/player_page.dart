@@ -379,6 +379,139 @@ class _PlayerPageState extends State<PlayerPage> {
     ]);
   }
 
+
+  void _selectEpisode(Episode episode) {
+    if (_ep?.id == episode.id) return;
+    _saveNow();
+    _player?.pause();
+    setState(() => _ep = episode);
+    _setup();
+  }
+
+  Future<void> _pickEpisodes() {
+    _hideTimer?.cancel();
+    final seasons = (_episodes.map((e) => e.season).toSet().toList()..sort());
+    var selectedSeason = _ep?.season ?? seasons.first;
+    var rangeStart = 0;
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, updateSheet) {
+          final seasonEpisodes = _episodes
+              .where((e) => e.season == selectedSeason)
+              .toList()
+            ..sort((a, b) => a.episode.compareTo(b.episode));
+          final rangeCount = (seasonEpisodes.length + 99) ~/ 100;
+          if (rangeStart >= rangeCount * 100) rangeStart = 0;
+          final visible = seasonEpisodes.skip(rangeStart).take(100).toList();
+          return SizedBox(
+            height: MediaQuery.sizeOf(ctx).height * .78,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Text('Episodes',
+                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                ),
+                if (seasons.length > 1)
+                  SizedBox(
+                    height: 48,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        for (final season in seasons)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              showCheckmark: false,
+                              label: Text(season == 0 ? 'Specials' : 'Season $season'),
+                              selected: selectedSeason == season,
+                              onSelected: (_) => updateSheet(() {
+                                selectedSeason = season;
+                                rangeStart = 0;
+                              }),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                if (rangeCount > 1)
+                  SizedBox(
+                    height: 48,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        for (var r = 0; r < rangeCount; r++)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              showCheckmark: false,
+                              label: Text(
+                                '${(r * 100 + 1).toString().padLeft(3, '0')}-${((r + 1) * 100 < seasonEpisodes.length ? (r + 1) * 100 : seasonEpisodes.length).toString().padLeft(3, '0')}',
+                              ),
+                              selected: rangeStart == r * 100,
+                              onSelected: (_) => updateSheet(() => rangeStart = r * 100),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                    itemCount: visible.length,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 76,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      childAspectRatio: 1,
+                    ),
+                    itemBuilder: (context, i) {
+                      final episode = visible[i];
+                      final selected = episode.id == _ep?.id;
+                      final number = episode.episode == 0 ? i + rangeStart + 1 : episode.episode;
+                      return Card(
+                        margin: EdgeInsets.zero,
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _selectEpisode(episode);
+                          },
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('S${episode.season.toString().padLeft(2, '0')}',
+                                  style: TextStyle(color: Theme.of(ctx).colorScheme.primary,
+                                    fontSize: 13, fontWeight: FontWeight.w800)),
+                                const SizedBox(height: 3),
+                                Text('E${number.toString().padLeft(2, '0')}',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                                    color: selected ? Theme.of(ctx).colorScheme.primary : Theme.of(ctx).colorScheme.onSurface)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ).whenComplete(_kick);
+  }
+
   void _pickSpeed() {
     _sheet('Playback speed', [
       for (final r in _rates)
@@ -653,7 +786,10 @@ class _PlayerPageState extends State<PlayerPage> {
           children: [
             _opt(Icons.graphic_eq, 'Audio', _pickAudio),
             _opt(Icons.subtitles_outlined, 'Subtitles', _pickSubtitle),
-            _opt(Icons.speed, _rate.toStringAsFixed(_rate == _rate.roundToDouble() ? 1 : 2), _pickSpeed),
+            if (_episodes.isNotEmpty && _ep != null)
+              _opt(Icons.grid_view_rounded, 'Episodes', _pickEpisodes)
+            else
+              _opt(Icons.speed, _rate.toStringAsFixed(_rate == _rate.roundToDouble() ? 1 : 2), _pickSpeed),
             _opt(Icons.video_settings, _qualityLabel(), _pickSource),
             _opt(Icons.crop_free, _fits[_fitI].$2, () {
               setState(() => _fitI = (_fitI + 1) % _fits.length);
