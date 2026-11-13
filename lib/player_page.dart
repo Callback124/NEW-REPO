@@ -339,13 +339,22 @@ class _PlayerPageState extends State<PlayerPage> {
           padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Text('MovieBox languages', style: TextStyle(fontWeight: FontWeight.w700)),
         ),
-        for (final dub in _item.dubs)
-          ListTile(
-            title: Text(dub.language + (dub.original ? ' · Original' : '')),
-            trailing: dub.subjectId == _item.id && dub.detailPath == _item.detailPath
-                ? const Icon(Icons.check) : null,
-            onTap: () { Navigator.pop(context); _switchDub(dub); },
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final dub in _item.dubs)
+                ChoiceChip(
+                  showCheckmark: false,
+                  label: Text(dub.language + (dub.original ? ' · Original' : '')),
+                  selected: dub.subjectId == _item.id && dub.detailPath == _item.detailPath,
+                  onSelected: (_) { Navigator.pop(context); _switchDub(dub); },
+                ),
+            ],
           ),
+        ),
       ],
       if (_audioTracks.isNotEmpty) ...[
         const Divider(),
