@@ -168,11 +168,30 @@ class _ContinueWatching extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                child: Text('Continue watching',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('Continue watching',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700))),
+                    TextButton(
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Clear continue watching?'),
+                            content: const Text('All continue watching progress will be deleted.'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete all')),
+                            ],
+                          ),
+                        );
+                        if (ok == true) app.clearProgress();
+                      },
+                      child: const Text('Clear all'),
+                    ),
+                  ],
+                ),
               ),
               SizedBox(
                 height: w * 1.5 + 54,
