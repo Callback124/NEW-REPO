@@ -20,11 +20,9 @@ class HomePage extends StatelessWidget {
             SliverAppBar(
               floating: true,
               title: Text(
-                app.active == 'all'
-                    ? 'All providers'
-                    : (app.enabled.any((p) => p.id == app.active)
-                        ? app.enabled.firstWhere((p) => p.id == app.active).name
-                        : app.scopeName),
+                app.enabled.any((p) => p.id == app.active)
+                    ? app.enabled.firstWhere((p) => p.id == app.active).name
+                    : app.scopeName,
                 style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.3),
               ),
               actions: [
@@ -68,15 +66,6 @@ class HomePage extends StatelessWidget {
         child: ListView(
           shrinkWrap: true,
           children: [
-            RadioListTile<String>(
-              value: 'all',
-              groupValue: app.active,
-              title: const Text('All providers'),
-              onChanged: (v) {
-                app.setActive('all');
-                Navigator.pop(ctx);
-              },
-            ),
             for (final p in app.enabled)
               RadioListTile<String>(
                 value: p.id,
