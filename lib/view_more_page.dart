@@ -15,10 +15,24 @@ class MovieBoxViewMorePage extends StatefulWidget {
 
 class _MovieBoxViewMorePageState extends State<MovieBoxViewMorePage> {
   final List<Item> _items = [];
+  final ScrollController _scrollController = ScrollController();
   bool _loading = true;
   bool _hasMore = true;
   int _page = 1;
   String? _error;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_loading && _hasMore && _scrollController.hasClients &&
+        _scrollController.position.extentAfter < 550) {
+      _load();
+    }
+  }
 
   @override
   void initState() {
@@ -40,7 +54,7 @@ class _MovieBoxViewMorePageState extends State<MovieBoxViewMorePage> {
       if (!mounted) return;
       setState(() {
         _items.addAll(result.items);
-        _hasMore = result.hasMore;
+        _hasMore = result.hasMore && result.items.isNotEmpty;
         _page++;
         _loading = false;
       });
@@ -51,11 +65,14 @@ class _MovieBoxViewMorePageState extends State<MovieBoxViewMorePage> {
 
   @override
   Widget build(BuildContext context) {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.addListener(_onScroll);
     return Scaffold(
       appBar: AppBar(title: Text(widget.shelf.title)),
       body: _items.isEmpty && _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
+              controller: _scrollController,
               padding: const EdgeInsets.only(top: 8),
               children: [
                 if (_error != null)
@@ -82,11 +99,6 @@ class _MovieBoxViewMorePageState extends State<MovieBoxViewMorePage> {
                   ),
                 if (_loading) const Padding(
                   padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
-                if (!_loading && _hasMore)
-                  Center(child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: FilledButton(onPressed: _load, child: const Text('Load more')),
-                  )),
                 if (!_loading && !_hasMore && _items.isNotEmpty)
                   const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('You’re all caught up'))),
                 if (_error != null && _items.isEmpty)
