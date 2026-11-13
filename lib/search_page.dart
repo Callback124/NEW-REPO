@@ -22,8 +22,13 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMixin {
+  static String _savedQuery = '';
+  static List<_Group> _savedGroups = const [];
+  static List<String> _savedSuggestions = const [];
+  static double _savedOffset = 0;
+
   final _ctrl = TextEditingController();
-  final _scroll = ScrollController();
+  late final ScrollController _scroll;
   Timer? _debounce;
   int _token = 0;
   bool _loading = false;
@@ -38,7 +43,27 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    _ctrl.text = _savedQuery;
+    _query = _savedQuery;
+    _groups = _savedGroups;
+    _suggestions = _savedSuggestions;
+    _scroll = ScrollController(initialScrollOffset: _savedOffset);
+    _scroll.addListener(_saveSession);
+  }
+
+  void _saveSession() {
+    _savedQuery = _query;
+    _savedGroups = _groups;
+    _savedSuggestions = _suggestions;
+    if (_scroll.hasClients) _savedOffset = _scroll.offset;
+  }
+
+  @override
   void dispose() {
+    _saveSession();
+    _scroll.removeListener(_saveSession);
     _debounce?.cancel();
     _scroll.dispose();
     _ctrl.dispose();
@@ -55,6 +80,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
       _hasMore = false;
       _suggestions = const [];
     });
+    _saveSession();
     _loadSuggestions(v);
   }
 
@@ -70,6 +96,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
       final values = await MovieBoxAdapter().suggestions(q);
       if (!mounted || _ctrl.text.trim() != q) return;
       setState(() => _suggestions = values.take(8).toList());
+      _saveSession();
     } catch (_) {
       if (mounted) setState(() => _suggestions = const []);
     }
@@ -79,6 +106,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     _ctrl.text = value;
     _ctrl.selection = TextSelection.collapsed(offset: value.length);
     setState(() => _suggestions = const []);
+    _saveSession();
     _search(value);
   }
 
@@ -122,6 +150,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
       _groups = groups;
       _loading = false;
     });
+    _saveSession();
   }
 
   void _onScroll() {
@@ -149,6 +178,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
           _hasMore = next.hasMore;
           _loadingMore = false;
         });
+        _saveSession();
       } else {
         setState(() => _loadingMore = false);
       }
