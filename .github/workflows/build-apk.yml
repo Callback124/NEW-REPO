@@ -58,12 +58,17 @@ jobs:
                                       val title = call.argument<String>("title") ?: "Video download"
                                       val fileName = (call.argument<String>("fileName") ?: "video.mp4")
                                           .replace(Regex("[^A-Za-z0-9._-]"), "_")
+                                      val gallery = call.argument<Boolean>("gallery") ?: false
                                       val request = DownloadManager.Request(Uri.parse(url))
                                           .setTitle(title)
                                           .setDescription("Stratus · Downloads")
                                           .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                          .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Stratus/$fileName")
-                                          .setAllowedOverMetered(true)
+                                      if (gallery) {
+                                          request.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "Stratus/$fileName")
+                                      } else {
+                                          request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_MOVIES, "Stratus/$fileName")
+                                      }
+                                      request.setAllowedOverMetered(true)
                                           .setAllowedOverRoaming(true)
                                       val headers = call.argument<Map<String, String>>("headers") ?: emptyMap()
                                       headers.forEach { (key, value) -> request.addRequestHeader(key, value) }
