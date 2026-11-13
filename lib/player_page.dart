@@ -27,6 +27,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late Item _item = widget.item;
 
   late Episode? _ep = widget.ep;
+  late List<Episode> _episodes = widget.list;
   List<Source> _srcs = const [];
   Source? _cur;
   String? _msg = 'Finding sources…';
@@ -64,8 +65,8 @@ class _PlayerPageState extends State<PlayerPage> {
 
   Episode? get _next {
     if (_ep == null) return null;
-    final i = widget.list.indexWhere((e) => e.id == _ep!.id);
-    return i >= 0 && i + 1 < widget.list.length ? widget.list[i + 1] : null;
+    final i = _episodes.indexWhere((e) => e.id == _ep!.id);
+    return i >= 0 && i + 1 < _episodes.length ? _episodes[i + 1] : null;
   }
 
   /* ---- sources ---- */
@@ -294,7 +295,7 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   int _sourceResolution(Source s) {
-    final m = RegExp(r'(\\d{3,4})p?', caseSensitive: false).firstMatch(s.name);
+    final m = RegExp(r'(\d{3,4})p?', caseSensitive: false).firstMatch(s.name);
     return int.tryParse(m?.group(1) ?? '') ?? 0;
   }
 
@@ -315,6 +316,7 @@ class _PlayerPageState extends State<PlayerPage> {
       if (!mounted) return;
       setState(() {
         _item = fresh;
+        _episodes = fresh.episodes;
         _ep = fresh.episodes.isEmpty ? null : fresh.episodes.first;
       });
       await _setup();
