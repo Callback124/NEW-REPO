@@ -59,9 +59,24 @@ class DownloadService extends ChangeNotifier {
   static final DownloadService instance = DownloadService._();
   static const _channel = MethodChannel('app.stratus/downloads');
   static const _key = 'native_download_records';
+  static const _locationKey = 'download_location';
 
+  String downloadLocation = 'app_only';
   List<DownloadRecord> records = [];
   bool ready = false;
+
+  Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    downloadLocation = prefs.getString(_locationKey) == 'both' ? 'both' : 'app_only';
+    notifyListeners();
+  }
+
+  Future<void> setDownloadLocation(String value) async {
+    downloadLocation = value == 'both' ? 'both' : 'app_only';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_locationKey, downloadLocation);
+    notifyListeners();
+  }
 
   Future<void> refresh() async {
     final prefs = await SharedPreferences.getInstance();
@@ -103,7 +118,7 @@ class DownloadService extends ChangeNotifier {
     Map<String, String> headers = const {},
   }) async {
     final id = await _channel.invokeMethod<int>('enqueue', {
-      'url': url, 'title': title, 'fileName': fileName, 'headers': headers,
+      'url': url, 'title': title, 'fileName': fileName, 'headers': headers,\n      'gallery': downloadLocation == 'both',
     });
     if (id == null) throw Exception('Android Download Manager did not return a task ID.');
     final entry = {'id': id, 'title': title, 'fileName': fileName, 'url': url};
