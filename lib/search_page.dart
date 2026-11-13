@@ -236,7 +236,6 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
                 children: [
                   for (final suggestion in _suggestions)
                     ActionChip(
-                      avatar: const Icon(Icons.search, size: 16),
                       label: Text(suggestion),
                       onPressed: () => _useSuggestion(suggestion),
                     ),
@@ -248,10 +247,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
           const SliverToBoxAdapter(child: Padding(
               padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()))
         else if (_query.isEmpty)
-          const SliverToBoxAdapter(
-              child: EmptyState(
-                  title: 'Search your providers',
-                  text: 'Type to see suggestions, then press Enter or select a suggestion.'))
+          const SliverToBoxAdapter(child: SizedBox.shrink())
         else if (nothing)
           SliverToBoxAdapter(
               child: EmptyState(
