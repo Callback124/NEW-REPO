@@ -193,7 +193,9 @@ class _DownloadPageState extends State<DownloadPage> {
   }
 
   Future<void> _startDownloads() async {
-    final selected = _visibleChoices.where((e) => !_series || _selected.contains(_choiceKey(e))).toList();
+    final selected = _series
+        ? _visibleChoices.where((e) => _selected.contains(_choiceKey(e))).toList()
+        : _visibleChoices.take(1).toList();
     if (selected.isEmpty) return;
     setState(() => _queueing = true);
     try {
@@ -284,15 +286,12 @@ class _DownloadPageState extends State<DownloadPage> {
           ))),
         if (!_loading && _error == null && !_series)
           Expanded(child: ListView(children: [
-            for (final c in choices)
+            if (choices.isNotEmpty)
               ListTile(
                 leading: const Icon(Icons.movie_outlined),
-                title: Text('${_item.title} · ${c.quality}'),
-                subtitle: Text(_sizeLabel(c.size)),
+                title: Text('${_item.title} · ${_quality ?? 'Original'}'),
+                subtitle: Text(_sizeLabel(choices.first.size)),
                 trailing: const Icon(Icons.download_outlined),
-                onTap: _queueing ? null : () { _selected
-                  ..clear()
-                  ..add(_choiceKey(c)); _startDownloads(); },
               ),
           ])),
         if (!_loading && _error == null && _series)
