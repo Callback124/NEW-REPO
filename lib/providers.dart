@@ -494,8 +494,9 @@ class MovieBoxAdapter extends Adapter {
               ? label
               : (node['resolution'] ?? node['resolutions'] ?? node['quality'] ?? format).toString();
           const urlKeys = ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl'];
+          final streamLabel = format.isNotEmpty ? '$quality $format' : quality;
           for (final key in urlKeys) {
-            if (node[key] != null) addUrl(node[key], label: quality, streamContext: streamContext);
+            if (node[key] != null) addUrl(node[key], label: streamLabel, streamContext: streamContext);
           }
           for (final entry in node.entries) {
             if (urlKeys.contains(entry.key) || entry.value == null) continue;
