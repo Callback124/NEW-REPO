@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'models.dart';
+import 'downloads_service.dart';
 import 'providers.dart';
 import 'store.dart';
 import 'widgets.dart';
@@ -68,6 +69,38 @@ class SettingsPage extends StatelessWidget {
                 child: Text(
                     'A provider is a source of titles. Add a Stremio-compatible addon, a JSON catalog, or a repository that lists several providers.',
                     style: TextStyle(color: cs.onSurfaceVariant)),
+              ),
+              section('Downloads'),
+              ListenableBuilder(
+                listenable: DownloadService.instance,
+                builder: (context, _) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Save downloaded videos'),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'app_only', label: Text('App only')),
+                            ButtonSegment(value: 'both', label: Text('App + Gallery')),
+                          ],
+                          selected: {DownloadService.instance.downloadLocation},
+                          onSelectionChanged: (s) => DownloadService.instance.setDownloadLocation(s.first),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        DownloadService.instance.downloadLocation == 'both'
+                            ? 'Downloads will appear in Stratus and your phone gallery.'
+                            : 'Downloads stay inside Stratus and are hidden from gallery apps.',
+                        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               section('Playback'),
               SwitchListTile(
