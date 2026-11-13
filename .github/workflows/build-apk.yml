@@ -27,6 +27,17 @@ jobs:
           flutter create --org app.stratus --project-name stratus --platforms=android /tmp/shell
           cp -r /tmp/shell/android ./android
           cp /tmp/shell/.metadata ./.metadata
+          # Permit immersive playback to extend into display-cutout areas (notches/punch holes).
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/src/main/res/values/styles.xml")
+          s = p.read_text()
+          s = re.sub(r'(<style name="(?:LaunchTheme|NormalTheme)"[^>]*>)',
+                     r'\1\\n        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>',
+                     s)
+          p.write_text(s)
+          PY
 
       - name: Allow network access
         run: |
