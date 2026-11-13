@@ -63,7 +63,23 @@ class _MovieBoxViewMorePageState extends State<MovieBoxViewMorePage> {
                     padding: const EdgeInsets.all(16),
                     child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                   ),
-                if (_items.isNotEmpty) PosterGrid(items: _items),
+                if (_items.isNotEmpty)
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 150,
+                      childAspectRatio: 0.48,
+                      mainAxisSpacing: 14,
+                      crossAxisSpacing: 12,
+                    ),
+                    itemCount: _items.length,
+                    itemBuilder: (context, index) => PosterCard(
+                      item: _items[index],
+                      onTap: () => openDetail(context, _items[index]),
+                    ),
+                  ),
                 if (_loading) const Padding(
                   padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
                 if (!_loading && _hasMore)
