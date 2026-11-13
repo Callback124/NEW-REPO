@@ -134,11 +134,11 @@ class MovieBoxAdapter extends Adapter {
   Map<String, String> _headers() => {
     'User-Agent': _ua, 'Origin': _web, 'Referer': '$_web/',
     'x-client-info': '{"timezone":"Asia/Calcutta"}',
-    'x-request-lang': 'en', 'Accept': 'application/json',
+    'x-request-lang': 'en', 'Accept': 'application/json', 'Connection': 'close',
   };
 
   String _clientToken() {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = DateTime.now().millisecondsSinceEpoch;
     final reversed = now.toString().split('').reversed.join();
     return now.toString() + ',' + md5.convert(utf8.encode(reversed)).toString();
   }
@@ -312,20 +312,30 @@ class MovieBoxAdapter extends Adapter {
     for (final op in ops.whereType<Map>()) {
       final type = (op['type'] ?? op['moduleType'] ?? '').toString().toUpperCase();
       final banner = op['banner'];
-      dynamic rawItems = op['subjects'] ?? op['items'];
-      if (rawItems == null && banner is List) rawItems = banner;
-      if (rawItems == null && banner is Map) {
-        rawItems = banner['subjects'] ?? banner['items'] ?? banner['list'] ?? banner['data'];
+      // MovieBox puts the hero-slide records specifically at banner.items.
+      // Treat those records as an ordinary poster shelf, not a hero carousel.
+      dynamic bannerItems;
+      if (banner is Map) {
+        bannerItems = banner['items'] ?? banner['subjects'] ?? banner['list'] ?? banner['data'];
+      } else if (banner is List) {
+        bannerItems = banner;
       }
-      if (rawItems == null && type == 'BANNER') rawItems = op['list'] ?? op['data'];
-      if (rawItems is! List) rawItems = const <dynamic>[];
+      final normalItems = op['subjects'] is List && (op['subjects'] as List).isNotEmpty
+          ? op['subjects']
+          : op['items'] is List && (op['items'] as List).isNotEmpty
+              ? op['items']
+              : null;
+      final rawItems = bannerItems is List && bannerItems.isNotEmpty
+          ? bannerItems
+          : normalItems ?? (type == 'BANNER' ? (op['list'] ?? op['data']) : null);
+      if (rawItems is! List) continue;
       final items = rawItems.whereType<Map>().map((x) => _item(p, x))
           .where((x) => x.id.isNotEmpty).toList();
       if (items.isEmpty) continue;
       final title = (op['title'] ?? op['name'] ??
-          (type == 'BANNER' ? 'Featured' : type == 'APPOINTMENT_LIST' ? 'Coming Soon' : 'Movies & Series'))
+          (bannerItems is List && bannerItems.isNotEmpty || type == 'BANNER'
+              ? 'Featured' : type == 'APPOINTMENT_LIST' ? 'Coming Soon' : 'Movies & Series'))
           .toString().trim();
-      // BANNER entries are a normal horizontal shelf, never a hero carousel.
       result.add(Shelf(title.isEmpty ? 'Movies & Series' : title, items,
           genreTopId: op['genreTopId']?.toString()));
     }
@@ -337,10 +347,25 @@ class MovieBoxAdapter extends Adapter {
   Future<List<Item>> search(ProviderDef p, String query) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
-    final json = await _json('subject/search', method: 'POST',
-        body: {'keyword': q, 'page': 1, 'perPage': 30});
-    final data = json['data'];
-    final items = data is Map ? (data['items'] as List? ?? const []) : const [];
+    dynamic json;
+    Object? firstError;
+    // Current API: POST /subject/search with perPage. Older MovieBox mirrors
+    // expose GET /search with pageSize; try it only if the current endpoint rejects.
+    try {
+      json = await _json('subject/search', method: 'POST',
+          body: {'keyword': q, 'page': 1, 'perPage': 30});
+    } catch (e) {
+      firstError = e;
+      try {
+        json = await _json('search',
+            query: {'keyword': q, 'page': '1', 'pageSize': '30'});
+      } catch (legacyError) {
+        throw ProviderError('MovieBox search failed. Current endpoint: $firstError. Legacy endpoint: $legacyError');
+      }
+    }
+    final data = json is Map ? json['data'] : null;
+    final raw = data is Map ? (data['items'] ?? data['list'] ?? data['subjectList']) : null;
+    final items = raw is List ? raw : const <dynamic>[];
     return items.whereType<Map>().map((x) => _item(p, x)).where((x) => x.id.isNotEmpty).toList();
   }
 
@@ -432,23 +457,33 @@ class MovieBoxAdapter extends Adapter {
       });
       final data = json is Map ? json['data'] : null;
       final out = <Source>[];
-      if (data is Map) {
-        for (final stream in (data['streams'] as List? ?? const []).whereType<Map>()) {
-          final url = (stream['url'] ?? stream['playUrl'] ?? stream['link'])?.toString();
-          if (url != null && url.isNotEmpty) {
-            out.add(Source.clean(name: (stream['resolutions'] ?? stream['resolution'] ?? 'Auto').toString() +
-                ' · ' + (stream['format'] ?? 'MP4').toString(), url: url, headers: playerHeaders));
+      final seen = <String>{};
+      void addUrl(dynamic value, {String label = 'Auto'}) {
+        if (value is! String || !isHttp(value) || !seen.add(value)) return;
+        final lower = value.toLowerCase();
+        final hls = lower.contains('.m3u8') || label.toLowerCase().contains('hls');
+        final mp4 = lower.contains('.mp4') || label.toLowerCase().contains('mp4');
+        if (!hls && !mp4) return;
+        out.add(Source.clean(name: '$label · ${hls ? 'HLS' : 'MP4'}',
+            url: value, headers: playerHeaders));
+      }
+      void scan(dynamic node, [String label = 'Auto', int depth = 0]) {
+        if (depth > 7) return;
+        if (node is List) {
+          for (final value in node) { scan(value, label, depth + 1); }
+        } else if (node is Map) {
+          final quality = (node['resolution'] ?? node['resolutions'] ?? node['quality'] ?? label).toString();
+          for (final key in ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl']) {
+            addUrl(node[key], label: quality);
           }
-        }
-        for (final stream in (data['hls'] as List? ?? const []).whereType<Map>()) {
-          final url = (stream['url'] ?? stream['playUrl'] ?? stream['link'])?.toString();
-          if (url != null && url.isNotEmpty) {
-            out.add(Source.clean(name: (stream['resolutions'] ?? stream['resolution'] ?? 'Auto').toString() +
-                ' · HLS', url: url, headers: playerHeaders));
+          for (final key in ['streams', 'hls', 'mp4', 'sources', 'list', 'items',
+              'playList', 'playlist', 'data', 'source', 'videos', 'qualities']) {
+            if (node.containsKey(key)) scan(node[key], quality, depth + 1);
           }
         }
       }
-      return out.where((x) => x.playable).toList();
+      scan(data);
+      return out;
     }
     Object? firstError;
     var streams = <Source>[];
@@ -462,7 +497,7 @@ class MovieBoxAdapter extends Adapter {
     }
     if (streams.isEmpty) {
       throw ProviderError('MovieBox returned no MP4/HLS sources. subjectId=' + item.id +
-          ', detailPath=' + (item.detailPath ?? 'missing') + '.');
+          ', detailPath=' + (item.detailPath ?? 'missing') + '. The play API returned no recognized .mp4/.m3u8 URL.');
     }
     return streams;
   }
