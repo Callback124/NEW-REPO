@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-
 import 'models.dart';
 import 'player_page.dart';
 import 'providers.dart';
