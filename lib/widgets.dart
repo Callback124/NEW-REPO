@@ -21,7 +21,7 @@ String _optimizedPosterUrl(String? raw) {
   if (!isHttp(raw)) return raw ?? '';
   final uri = Uri.tryParse(raw!);
   if (uri == null || uri.host != 'image.tmdb.org') return raw;
-  final path = uri.path.replaceFirst('/t/p/original/', '/t/p/w342/');
+  final path = uri.path.replaceFirst('/t/p/original/', '/t/p/w185/');
   return uri.replace(path: path).toString();
 }
 
@@ -51,10 +51,10 @@ class Poster extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: _optimizedPosterUrl(url),
                 fit: BoxFit.cover,
-                memCacheWidth: 240,
-                memCacheHeight: 360,
-                maxWidthDiskCache: 480,
-                maxHeightDiskCache: 720,
+                memCacheWidth: 180,
+                memCacheHeight: 270,
+                maxWidthDiskCache: 360,
+                maxHeightDiskCache: 540,
                 fadeInDuration: Duration.zero,
                 fadeOutDuration: Duration.zero,
                 placeholder: (_, __) => Center(
@@ -190,7 +190,7 @@ class ShelfRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: shelf.items.length,
               itemExtent: w + 12,
-              cacheExtent: w * 7,
+              cacheExtent: w * 12,
               itemBuilder: (context, i) {
                 final it = shelf.items[i];
                 return Padding(
