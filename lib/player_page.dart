@@ -243,9 +243,9 @@ class _PlayerPageState extends State<PlayerPage> {
       await controller.initialize();
       if (!mounted || _player != controller) return false;
 
-      // Story TV exposes one master HLS URL. Read ExoPlayer's adaptive video
+      // Story TV and Free Reels expose master HLS URLs. Read ExoPlayer's adaptive video
       // tracks from that same controller; never load variant playlist URLs.
-      if (_item.pid == 'storytv' && controller.isVideoTrackSupportAvailable()) {
+      if ((_item.pid == 'storytv' || _item.pid == 'freereels') && controller.isVideoTrackSupportAvailable()) {
         try {
           final tracks = await controller.getVideoTracks();
           if (!mounted || _player != controller) return false;
