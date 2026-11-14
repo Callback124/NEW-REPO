@@ -17,6 +17,8 @@ dependencies:
   url_launcher: ^6.3.0
   video_player: ^2.14.1
   just_audio: ^0.9.46
+  just_audio_background: ^0.0.1-beta.17
+  audio_service: ^0.18.15
   dart_des: ^1.0.2
   ffmpeg_kit_flutter_new_https: ^2.6.8
   path_provider: ^2.1.5
