@@ -779,6 +779,7 @@ class StoryTvAdapter extends Adapter {
         throw ProviderError('Story TV stream manifest HTTP ${response.statusCode}.');
       }
       final body = utf8.decode(response.bodyBytes);
+      final manifestUri = response.request?.url ?? Uri.parse(url);
       if (!body.contains('#EXT-X-STREAM-INF')) {
         final directQuality = RegExp(r'(?:4k|2160p?|4320p?)', caseSensitive:false).hasMatch(url);
         if (directQuality) {
@@ -798,11 +799,17 @@ class StoryTvAdapter extends Adapter {
         while(next<lines.length && lines[next].trim().isEmpty) { next++; }
         if(next<lines.length && !lines[next].trim().startsWith('#')) {
           variants.add((height:height,bandwidth:bandwidth,
-            uri:Uri.parse(url).resolve(lines[next].trim()).toString(),codecs:codecs));
+            uri:manifestUri.resolve(lines[next].trim()).toString(),codecs:codecs));
         }
       }
       final supported=variants.where((v)=>v.height>0 && v.height<=1080).toList()
-        ..sort((a,b)=>b.height.compareTo(a.height));
+        ..sort((a,b) {
+          final byHeight = b.height.compareTo(a.height);
+          if (byHeight != 0) return byHeight;
+          final aAvc = a.codecs.toLowerCase().contains('avc1') ? 1 : 0;
+          final bAvc = b.codecs.toLowerCase().contains('avc1') ? 1 : 0;
+          return bAvc.compareTo(aAvc);
+        });
       if(supported.isEmpty) {
         throw ProviderError('Story TV master playlist has no 1080p-or-lower variant. Found: ${variants.map((v)=>v.height==0?'unknown':'${v.height}p').join(', ')}');
       }
