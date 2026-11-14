@@ -724,38 +724,58 @@ class StoryTvAdapter extends Adapter {
       genres:[(d['genre'] ?? (item.genres.isNotEmpty ? item.genres.first : 'Drama')).toString()],
       episodes:eps, plot:'$count episodes');
   }
-  Future<String> _limitHlsTo1080(String url) async {
-    try {
-      final response = await _client.get(Uri.parse(url), headers: _playerHeaders)
-          .timeout(const Duration(seconds: 12));
-      if (response.statusCode < 200 || response.statusCode >= 300) return url;
-      final body = utf8.decode(response.bodyBytes);
-      if (!body.contains('#EXT-X-STREAM-INF')) return url;
-      final lines = body.split(RegExp(r'\r?\n'));
-      final variants = <({int height, String uri})>[];
-      for (var i = 0; i < lines.length; i++) {
-        final line = lines[i].trim();
-        if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
-        final resolution = RegExp(r'RESOLUTION=\d+x(\d+)', caseSensitive: false).firstMatch(line);
-        final height = int.tryParse(resolution?.group(1) ?? '') ?? 0;
-        var next = i + 1;
-        while (next < lines.length && lines[next].trim().isEmpty) { next++; }
-        if (next < lines.length && !lines[next].trim().startsWith('#')) {
-          variants.add((height: height, uri: Uri.parse(url).resolve(lines[next].trim()).toString()));
-        }
-      }
-      if (variants.isEmpty) return url;
-      final supported = variants.where((v) => v.height > 0 && v.height <= 1080).toList()
-        ..sort((a, b) => b.height.compareTo(a.height));
-      if (supported.isEmpty) {
-        throw ProviderError('Story TV stream has no 1080p-or-lower HLS variant for this device.');
-      }
-      return supported.first.uri;
-    } on ProviderError {
-      rethrow;
-    } catch (_) {
-      return url;
+  Future<List<Source>> _storyTvHlsSources(String url) async {
+    // Resolve redirects before parsing relative variant paths. A Story TV
+    // epsUrl can be either a master playlist or a single media playlist/file.
+    final response = await _client.get(Uri.parse(url), headers: _playerHeaders)
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ProviderError('Story TV stream request failed (HTTP ${response.statusCode}).');
     }
+    final finalUrl = response.request?.url.toString() ?? url;
+    final body = utf8.decode(response.bodyBytes, allowMalformed: true);
+    if (!body.trimLeft().startsWith('#EXTM3U') ||
+        !body.contains('#EXT-X-STREAM-INF')) {
+      return [Source.clean(name: 'Auto', url: finalUrl, headers: _playerHeaders)];
+    }
+
+    final lines = body.split(RegExp(r'\\r?\\n'));
+    final variants = <({int height, int bandwidth, String codecs, String uri})>[];
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
+      final resolution = RegExp(r'RESOLUTION=\\d+x(\\d+)', caseSensitive: false).firstMatch(line);
+      final height = int.tryParse(resolution?.group(1) ?? '') ?? 0;
+      final bandwidthMatch = RegExp(r'(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\\d+)', caseSensitive: false).firstMatch(line);
+      final bandwidth = int.tryParse(bandwidthMatch?.group(1) ?? '') ?? 0;
+      final codecMatch = RegExp(r'CODECS="([^"]+)"', caseSensitive: false).firstMatch(line);
+      final codecs = codecMatch?.group(1)?.toLowerCase() ?? '';
+      var next = i + 1;
+      while (next < lines.length && lines[next].trim().isEmpty) { next++; }
+      if (next >= lines.length || lines[next].trim().isEmpty ||
+          lines[next].trim().startsWith('#')) continue;
+      // Explicit HEVC/AV1 variants commonly fail on older Android hardware.
+      // Keep unknown codec metadata eligible; do not guess from resolution.
+      if (codecs.contains('hev1') || codecs.contains('hvc1') ||
+          codecs.contains('av01')) continue;
+      final variantUri = Uri.parse(finalUrl).resolve(lines[next].trim()).toString();
+      variants.add((height: height, bandwidth: bandwidth, codecs: codecs, uri: variantUri));
+    }
+
+    final supported = variants.where((v) => v.height == 0 || v.height <= 1080).toList()
+      ..sort((a, b) {
+        final byHeight = b.height.compareTo(a.height);
+        return byHeight != 0 ? byHeight : b.bandwidth.compareTo(a.bandwidth);
+      });
+    if (supported.isEmpty) {
+      throw ProviderError('Story TV playlist has no H.264 1080p-or-lower variant. The server may only provide 4K or an unsupported codec.');
+    }
+
+    final seen = <String>{};
+    return supported.where((v) => seen.add(v.uri)).map((v) {
+      final label = v.height > 0 ? '${v.height}p' : 'Auto';
+      return Source.clean(name: label, url: v.uri, headers: _playerHeaders);
+    }).toList();
   }
 
   @override Future<List<Source>> sources(ProviderDef p,Item item,Episode? ep) async {
@@ -770,8 +790,7 @@ class StoryTvAdapter extends Adapter {
     for(final x in raw.whereType<Map>()) { if((x['index'] as num?)?.toInt()==number) {match=x;break;} }
     final url=match?['epsUrl']?.toString() ?? '';
     if(!isHttp(url)) throw ProviderError('Story TV stream URL not available for episode $number.');
-    final playableUrl = await _limitHlsTo1080(url);
-    return [Source.clean(name:'Auto · up to 1080p',url:playableUrl,headers:_playerHeaders)];
+    return _storyTvHlsSources(url);
   }
 }
 
