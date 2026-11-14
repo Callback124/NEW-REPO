@@ -16,6 +16,7 @@ class DownloadRecord {
     this.total = -1,
     this.localUri,
     this.reason = 0,
+    this.phase = '',
   });
 
   final int id;
