@@ -21,6 +21,7 @@ class DownloadRecord {
     this.artist = '',
     this.image = '',
     this.duration = 0,
+    this.songId = '',
   });
 
   final int id;
@@ -37,6 +38,7 @@ class DownloadRecord {
   final String artist;
   final String image;
   final int duration;
+  final String songId;
 
   double get progress => total > 0 ? (downloaded / total).clamp(0, 1).toDouble() : 0;
   String get sizeLabel => total > 0 ? _bytes(total) : 'Size unknown';
@@ -56,6 +58,7 @@ class DownloadRecord {
     artist: (m['artist'] ?? '').toString(),
     image: (m['image'] ?? '').toString(),
     duration: (m['duration'] as num?)?.toInt() ?? 0,
+    songId: (m['songId'] ?? '').toString(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -173,13 +176,14 @@ class DownloadService extends ChangeNotifier {
     String artist = '',
     String image = '',
     int duration = 0,
+    String songId = '',
   }) async {
     final id = await _channel.invokeMethod<int>('enqueue', {
       'url': url, 'title': title, 'fileName': fileName, 'headers': headers,
       'gallery': downloadLocation == 'both',
     });
     if (id == null) throw Exception('Android Download Manager did not return a task ID.');
-    final entry = {'id': id, 'title': title, 'fileName': fileName, 'url': url, 'isMusic': isMusic, 'artist': artist, 'image': image, 'duration': duration};
+    final entry = {'id': id, 'title': title, 'fileName': fileName, 'url': url, 'isMusic': isMusic, 'artist': artist, 'image': image, 'duration': duration, 'songId': songId};
     final prefs = await SharedPreferences.getInstance();
     final list = <Map<String, dynamic>>[];
     final raw = prefs.getString(_key);
