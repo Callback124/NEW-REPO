@@ -676,9 +676,15 @@ class StoryTvAdapter extends Adapter {
       }
       final language = value.toString().trim().toLowerCase();
       if (language.isEmpty) continue;
-      if (language == '2' || language == 'hi' || language == 'hin' || language == 'hi-in' || language == 'hin-in' ||
+      final isHindi = language == '2' || language == 'hi' ||
+          language == 'hin' || language == 'hi-in' || language == 'hin-in' ||
           language.contains('hindi') || language.contains('हिंदी') ||
-          language.contains('हिन्दी')) continue;
+          language.contains('हिन्दी');
+      if (isHindi) {
+        if (RegExp(r'\b(english|tamil|telugu|malayalam|kannada|bengali|marathi|punjabi|urdu)\b')
+            .hasMatch(language)) return false;
+        continue;
+      }
       if (RegExp(r'^\d+$').hasMatch(language) ||
           RegExp(r'^[a-z]{2,3}(-[a-z]{2})?$').hasMatch(language)) return false;
     }
