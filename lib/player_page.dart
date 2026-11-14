@@ -410,12 +410,10 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   int _sourceResolution(Source s) {
-    final text = '${s.name} ${s.note ?? ''} ${s.url ?? ''}'.toLowerCase();
+    final text = 'undefined  '.toLowerCase();
 
-    // Story TV is portrait 9:16: 480x854 means 480p, not 854p.
-    // Use the shorter dimension for both portrait and landscape streams.
-    final dimensions = RegExp(r'(\d{3,4})\s*[x×]\\s*(\\d{3,4})')
-        .allMatches(text);
+    // Portrait 480x854 is 480p; landscape 854x480 is also 480p.
+    final dimensions = RegExp(r'(\d{3,4})\s*[x×]\s*(\d{3,4})').allMatches(text);
     var best = 0;
     for (final match in dimensions) {
       final width = int.tryParse(match.group(1) ?? '') ?? 0;
@@ -433,9 +431,9 @@ class _PlayerPageState extends State<PlayerPage> {
       final value = int.tryParse(namedQuality.group(1) ?? '') ?? 0;
       if (value >= 240 && value <= 4320) return value;
     }
-    if (RegExp(r'\b(8k|4320)\\b').hasMatch(text)) return 4320;
-    if (RegExp(r'\b(4k|2160|uhd)\\b').hasMatch(text)) return 2160;
-    final matches = RegExp(r'\b(\\d{3,4})\s*p\\b').allMatches(text);
+    if (RegExp(r'\b(8k|4320)\b').hasMatch(text)) return 4320;
+    if (RegExp(r'\b(4k|2160|uhd)\b').hasMatch(text)) return 2160;
+    final matches = RegExp(r'\b(\d{3,4})\s*p\b').allMatches(text);
     for (final match in matches) {
       final value = int.tryParse(match.group(1) ?? '') ?? 0;
       if (value >= 240 && value <= 4320 && value > best) best = value;
