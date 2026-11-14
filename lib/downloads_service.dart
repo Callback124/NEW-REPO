@@ -65,6 +65,43 @@ class DownloadService extends ChangeNotifier {
   String downloadLocation = 'app_only';
   List<DownloadRecord> records = [];
   bool ready = false;
+  VoidCallback? onOpenDownloads;
+
+  Future<int> createMergeTask(String title, int total) async {
+    final id = -DateTime.now().microsecondsSinceEpoch;
+    await _writeRecord({'id': id, 'title': title, 'fileName': '', 'url': '',
+      'status': 'running', 'downloaded': 0, 'total': total, 'localUri': null,
+      'reason': 0, 'phase': 'Preparing'});
+    return id;
+  }
+
+  Future<void> updateMergeTask(int id, {required int completed, required int total,
+      required String phase, String status = 'running', String? localUri,
+      String? fileName, int reason = 0}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    final list = raw == null ? <Map<String, dynamic>>[] :
+      (jsonDecode(raw) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final index = list.indexWhere((e) => e['id'] == id);
+    if (index < 0) return;
+    list[index] = {...list[index], 'downloaded': completed, 'total': total,
+      'status': status, 'phase': phase, 'reason': reason,
+      if (localUri != null) 'localUri': localUri,
+      if (fileName != null) 'fileName': fileName};
+    await prefs.setString(_key, jsonEncode(list));
+    await refresh();
+  }
+
+  Future<void> _writeRecord(Map<String, dynamic> entry) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    final list = raw == null ? <Map<String, dynamic>>[] :
+      (jsonDecode(raw) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    list.removeWhere((e) => e['id'] == entry['id']);
+    list.add(entry);
+    await prefs.setString(_key, jsonEncode(list));
+    await refresh();
+  }
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
