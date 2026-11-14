@@ -87,12 +87,12 @@ class _DownloadsPageState extends State<DownloadsPage> {
                     failed ? Icons.error_outline : Icons.downloading),
                   title: Text(r.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                   subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(_status(r)),
+                    Text(r.phase.isNotEmpty ? r.phase : _status(r)),
                     if (!done && !failed) ...[
                       const SizedBox(height: 6),
                       LinearProgressIndicator(value: r.total > 0 ? r.progress : null),
                       const SizedBox(height: 3),
-                      Text(r.total > 0 ? '${(r.progress * 100).toStringAsFixed(0)}% · ${r.sizeLabel}' : 'Waiting for file size…'),
+                      Text(r.id < 0 ? '${r.downloaded}/${r.total} episodes · ${(r.progress * 100).toStringAsFixed(0)}%' : (r.total > 0 ? '${(r.progress * 100).toStringAsFixed(0)}% · ${r.sizeLabel}' : 'Waiting for file size…')),
                     ],
                     if (done) Text(r.sizeLabel),
                   ]),
