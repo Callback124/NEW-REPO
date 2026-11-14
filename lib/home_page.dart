@@ -145,7 +145,7 @@ class _ProviderSectionState extends State<_ProviderSection> {
                 child: Text('${p.name} has no home catalogs. Try Search.'),
               );
             }
-            return p.kind == 'storytv'
+            return (p.kind == 'storytv' || p.kind == 'freereels')
                 ? _StoryTvGrid(items: shelves.expand((s) => s.items).toList(), provider: p, scrollController: widget.scrollController)
                 : Column(children: [for (final s in shelves) ShelfRow(shelf: s)]);
           },
@@ -292,7 +292,9 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
   void initState() {
     super.initState();
     widget.scrollController.addListener(_onScroll);
-    _hasMore = StoryTvAdapter.homeHasMore(widget.provider.id);
+    _hasMore = widget.provider.kind == 'storytv'
+        ? StoryTvAdapter.homeHasMore(widget.provider.id)
+        : FreeReelsAdapter.hasMoreFor(widget.provider.id);
     WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
   }
 
@@ -321,15 +323,19 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
     if (_loadingMore || !_hasMore) return;
     setState(() { _loadingMore = true; _loadError = false; });
     try {
-      final next = await StoryTvAdapter().explorePage(widget.provider, page: _page + 1);
+      final nextItems = widget.provider.kind == 'storytv'
+          ? (await StoryTvAdapter().explorePage(widget.provider, page: _page + 1)).items
+          : await FreeReelsAdapter().loadMore(widget.provider);
       if (!mounted) return;
       final seen = _items.map((e) => e.id).toSet();
-      final fresh = next.items.where((e) => seen.add(e.id)).toList();
+      final fresh = nextItems.where((e) => seen.add(e.id)).toList();
       setState(() {
         _items.addAll(fresh);
         _page++;
         _emptyPages = fresh.isEmpty ? _emptyPages + 1 : 0;
-        _hasMore = next.hasMore && _emptyPages < 5;
+        _hasMore = (widget.provider.kind == 'storytv'
+            ? StoryTvAdapter.homeHasMore(widget.provider.id)
+            : FreeReelsAdapter.hasMoreFor(widget.provider.id)) && _emptyPages < 5;
         _loadingMore = false;
         _loadError = false;
       });
