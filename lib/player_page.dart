@@ -338,7 +338,7 @@ class _PlayerPageState extends State<PlayerPage> {
       return width < height ? width : height;
     }
     final label = track.label ?? '';
-    final match = RegExp(r'(\\d{3,4})\\s*p?', caseSensitive: false).firstMatch(label);
+    final match = RegExp(r'(\d{3,4})\s*p?', caseSensitive: false).firstMatch(label);
     return int.tryParse(match?.group(1) ?? '') ?? 0;
   }
 
