@@ -25,6 +25,10 @@ Future<void> _downloadSaavn(BuildContext context, SaavnSong song) async {
       title: song.title,
       fileName: '${safe.isEmpty ? 'JioSaavn Song' : safe}_${quality}kbps.mp4',
       headers: const {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'},
+      isMusic: true,
+      artist: song.artist,
+      image: song.image,
+      duration: song.duration,
     );
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Downloading ${song.title} · $quality kbps')));
   } catch (e) {
@@ -70,11 +74,12 @@ class _MusicPageState extends State<MusicPage> {
   }
   String img(Map m)=>(m['image']??m['album_image']??'').toString().replaceAll('150x150','500x500').replaceAll('50x50','500x500').replaceAll('http://','https://');
   String type(Map m){final t=(m['type']??m['media_type']??'').toString().toLowerCase();if(t.contains('artist')||m.containsKey('artistid'))return 'artist';if(t.contains('album')||m.containsKey('albumid'))return 'album';if(t.contains('song')||m.containsKey('encrypted_media_url'))return 'song';return 'playlist';}
+  Future<void> _searchGenre(String genre) async { setState(() { searching = true; query.text = saavnClean(genre); tab = 0; songs = []; media = []; }); await search(query.text); }
   void open(Map<String,dynamic> m){final t=type(m);if(t=='artist'){Navigator.push(context,MaterialPageRoute(builder:(_)=>SaavnArtistPage(item:m)));}else if(t=='song'){final s=SaavnSong.fromJson(m);play([s],0);}else{showModalBottomSheet<void>(context:context,isScrollControlled:true,showDragHandle:true,builder:(_)=>SaavnTracklistSheet(item:m,playlist:t=='playlist'));}}
   Future<void> play(List<SaavnSong> list,int i)async{try{await JioSaavnPlayer.instance.playList(list,start:i);if(mounted)Navigator.push(context,MaterialPageRoute(builder:(_)=>const SaavnFullPlayer()));}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Playback failed: '+e.toString())));}}
   @override
   Widget build(BuildContext context)=>PopScope(canPop: !searching,onPopInvokedWithResult: (didPop, result){if(!didPop && searching){setState(()=>searching=false);}},child:CustomScrollView(slivers:[
-    SliverAppBar(floating:true,title:const Text('Music',style:TextStyle(fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:()=>setState(()=>searching=!searching),icon:const Icon(Icons.search))]),
+    SliverAppBar(floating:true,title:const Text('JioSaavn',style:TextStyle(fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:()=>setState(()=>searching=!searching),icon:const Icon(Icons.search))]),
     if(searching)SliverToBoxAdapter(child:Padding(padding:const EdgeInsets.fromLTRB(16,0,16,12),child:Column(children:[
       TextField(controller:query,textInputAction:TextInputAction.search,onSubmitted:search,decoration:InputDecoration(hintText:'Songs, albums, artists, playlists',suffixIcon:IconButton(onPressed:()=>search(query.text),icon:const Icon(Icons.arrow_forward)),filled:true,border:OutlineInputBorder(borderRadius:BorderRadius.circular(14),borderSide:BorderSide.none))),
       const SizedBox(height:8),SingleChildScrollView(scrollDirection:Axis.horizontal,child:Row(children:List.generate(4,(i)=>Padding(padding:const EdgeInsets.only(right:8),child:ChoiceChip(label:Text(['Songs','Albums','Playlists','Artists'][i]),selected:tab==i,showCheckmark:false,onSelected:(_){setState(()=>tab=i);if(query.text.isNotEmpty)search(query.text);}))))),
@@ -85,12 +90,13 @@ class _MusicPageState extends State<MusicPage> {
     if(!searching)SliverToBoxAdapter(child:FutureBuilder<List<SaavnSection>>(future:home,builder:(context,snap){
       if(snap.connectionState==ConnectionState.waiting)return const Padding(padding:EdgeInsets.all(32),child:Center(child:CircularProgressIndicator()));
       if(snap.hasError)return Padding(padding:const EdgeInsets.all(20),child:Column(children:[Text('JioSaavn load failed: '+snap.error.toString()),TextButton(onPressed:()=>setState(()=>home=api.home()),child:const Text('Retry'))]));
-      return Column(children:[for(final sec in snap.data??[])_section(sec)]);
+      final sections = (snap.data??[]).where((s)=>!s.title.toLowerCase().contains('devotional') && !s.title.toLowerCase().contains('bhakti')).toList();
+      return Column(children:[for(final sec in sections)_section(sec)]);
     })),
   ]));
   Widget _section(SaavnSection s)=>Padding(padding:const EdgeInsets.only(bottom:20),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Padding(padding:const EdgeInsets.fromLTRB(16,0,16,10),child:Text(s.title,style:Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight:FontWeight.bold))),
-    SizedBox(height:188,child:ListView.builder(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:16),itemCount:s.items.length,itemBuilder:(context,i){final m=s.items[i];final image=img(m);return GestureDetector(onTap:()=>open(m),child:SizedBox(width:126,child:Padding(padding:const EdgeInsets.only(right:12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    SizedBox(height:188,child:ListView.builder(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:16),itemCount:s.items.length,itemBuilder:(context,i){final m=s.items[i];final image=img(m);return GestureDetector(onTap:()=>s.title.toLowerCase().contains('genres')? _searchGenre(saavnClean(m['title']??m['name']??'')) : open(m),child:SizedBox(width:136,child:Padding(padding:const EdgeInsets.only(right:12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       ClipRRect(borderRadius:BorderRadius.circular(12),child:AspectRatio(aspectRatio:1,child:image.isEmpty?const ColoredBox(color:Colors.black12,child:Icon(Icons.music_note)):Image.network(image,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const Icon(Icons.music_note)))),
       const SizedBox(height:7),Text(saavnClean(m['title']??m['name']??'Music'),maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w600,fontSize:13)),
     ]))));})),
