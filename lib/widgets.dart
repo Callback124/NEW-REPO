@@ -17,6 +17,14 @@ void openDetail(BuildContext context, Item item) {
 }
 
 /// Poster with an initial-letter placeholder underneath, so nothing jumps while images load.
+String _optimizedPosterUrl(String? raw) {
+  if (!isHttp(raw)) return raw ?? '';
+  final uri = Uri.tryParse(raw!);
+  if (uri == null || uri.host != 'image.tmdb.org') return raw;
+  final path = uri.path.replaceFirst('/t/p/original/', '/t/p/w342/');
+  return uri.replace(path: path).toString();
+}
+
 class Poster extends StatelessWidget {
   const Poster({super.key, required this.url, required this.title, this.progress, this.corner});
 
@@ -41,9 +49,12 @@ class Poster extends StatelessWidget {
             ),
             if (isHttp(url))
               CachedNetworkImage(
-                imageUrl: url!,
+                imageUrl: _optimizedPosterUrl(url),
                 fit: BoxFit.cover,
-                memCacheWidth: 360,
+                memCacheWidth: 240,
+                memCacheHeight: 360,
+                maxWidthDiskCache: 480,
+                maxHeightDiskCache: 720,
                 fadeInDuration: Duration.zero,
                 fadeOutDuration: Duration.zero,
                 placeholder: (_, __) => Center(
