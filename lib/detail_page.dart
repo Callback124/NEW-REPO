@@ -74,6 +74,7 @@ class _DetailPageState extends State<DetailPage> {
           final d = snap.data ?? widget.item;
           final err = snap.error;
           final eps = d.episodes;
+          final isStoryTv = d.pid == 'storytv';
           final seasons = (eps.map((e) => e.season).toSet().toList()..sort());
           if (eps.isNotEmpty) _season ??= (_lastEp(d) ?? eps.first).season;
           final list = eps.where((e) => e.season == _season).toList();
@@ -232,7 +233,7 @@ class _DetailPageState extends State<DetailPage> {
                       child: Text(d.plot!, style: const TextStyle(height: 1.5)),
                     ),
                   ),
-                if (seasons.length > 1)
+                if (!isStoryTv && seasons.length > 1)
                   SliverToBoxAdapter(
                     child: SizedBox(
                       height: 52,
@@ -293,7 +294,6 @@ class _DetailPageState extends State<DetailPage> {
                     ),
                     itemBuilder: (context, i) {
                       final e = visibleEpisodes[i];
-                      final seasonLabel = 'S${e.season.toString().padLeft(2, '0')}';
                       final episodeNumber = e.episode == 0 ? i + 1 : e.episode;
                       final episodeLabel = 'E${episodeNumber.toString().padLeft(2, '0')}';
                       return Card(
@@ -304,13 +304,6 @@ class _DetailPageState extends State<DetailPage> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(seasonLabel,
-                                style: TextStyle(
-                                  color: cs.primary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                )),
-                              const SizedBox(height: 3),
                               Text(episodeLabel,
                                 style: TextStyle(
                                   color: cs.onSurface,
