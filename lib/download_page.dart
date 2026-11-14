@@ -92,8 +92,45 @@ class _DownloadPageState extends State<DownloadPage> {
     return path.endsWith('.mp4') || s.name.toLowerCase().contains('mp4');
   }
 
+  Future<List<Source>> _storyTvVariants(Source master) async {
+    final response = await http.get(Uri.parse(master.url!), headers: master.headers)
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Could not read Story TV quality playlist.');
+    }
+    final lines = response.body.split(RegExp(r'\\r?\\n'));
+    final result = <Source>[];
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+      var next = i + 1;
+      while (next < lines.length && (lines[next].trim().isEmpty || lines[next].trim().startsWith('#'))) { next++; }
+      if (next >= lines.length) continue;
+      final resolution = RegExp(r'RESOLUTION=\\d+x(\\d+)', caseSensitive: false).firstMatch(line);
+      final bandwidth = RegExp(r'BANDWIDTH=(\\d+)', caseSensitive: false).firstMatch(line);
+      var tier = resolution == null ? 0 : int.tryParse(resolution.group(1)!) ?? 0;
+      if (tier == 0 && bandwidth != null) {
+        final b = int.tryParse(bandwidth.group(1)!) ?? 0;
+        tier = b >= 5000000 ? 1080 : b >= 2500000 ? 720 : b >= 1000000 ? 480 : 360;
+      }
+      if (tier <= 0) continue;
+      result.add(Source.clean(name: '${tier}p',
+        url: Uri.parse(master.url!).resolve(lines[next].trim()).toString(),
+        headers: master.headers));
+    }
+    final seen = <String>{};
+    final variants = result.where((s) => seen.add(s.url!)).toList()
+      ..sort((a, b) => _qualityRank(b.name).compareTo(_qualityRank(a.name)));
+    return variants;
+  }
+
   Future<List<Source>> _filesFor(Episode? ep) async {
     final sources = await getSources(_item, ep);
+    if (_item.pid == 'storytv') {
+      final masters = sources.where((s) => s.playable &&
+        (Uri.tryParse(s.url!)?.path.toLowerCase().endsWith('.m3u8') ?? false));
+      return masters.isEmpty ? [] : _storyTvVariants(masters.first);
+    }
     final seen = <String>{};
     return sources.where((s) => s.playable && _isDirectFile(s) && seen.add(s.url!)).toList();
   }
@@ -107,7 +144,7 @@ class _DownloadPageState extends State<DownloadPage> {
         ..sort((a, b) => _qualityRank(b.quality).compareTo(_qualityRank(a.quality)));
         if (_choices.isEmpty) throw Exception('No direct MP4 download source is available for this title.');
       } else {
-        final eps = _pageEpisodes;
+        final eps = _item.pid == 'storytv' ? _item.episodes : _pageEpisodes;
         _scanTotal = eps.length;
         final found = <_DownloadChoice>[];
         var cursor = 0;
