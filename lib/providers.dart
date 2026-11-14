@@ -654,9 +654,10 @@ class StoryTvAdapter extends Adapter {
 
   bool _isHindiShow(Map raw) {
     const languageKeys = <String>{
-      'langid', 'languageid', 'language_id', 'langcode', 'languagecode',
-      'language', 'languagename', 'audiolanguage', 'audio_language',
-      'defaultlanguage', 'default_language'
+      'langid', 'languageid', 'language_id', 'langcode', 'languagecode', 'langname',
+      'language', 'languages', 'languagename', 'audiolanguage', 'audio_language',
+      'audiolang', 'audiolangid', 'contentlanguage', 'contentlanguageid',
+      'availablelanguages', 'defaultlanguage', 'default_language'
     };
     final values = <Object?>[];
     void scan(Map value) {
