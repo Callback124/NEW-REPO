@@ -329,7 +329,7 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
         _items.addAll(fresh);
         _page++;
         _emptyPages = fresh.isEmpty ? _emptyPages + 1 : 0;
-        _hasMore = next.hasMore && _emptyPages < 2;
+        _hasMore = next.hasMore && _emptyPages < 5;
         _loadingMore = false;
         _loadError = false;
       });
