@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,8 +14,9 @@ import 'widgets.dart';
 const Color _kSeek = Color(0xFFE8335F);
 
 class PlayerPage extends StatefulWidget {
-  const PlayerPage({super.key, required this.item, this.ep, this.list = const []});
+  const PlayerPage({super.key, required this.item, this.ep, this.list = const [], this.localFile});
   final Item item;
+  final File? localFile;
   final Episode? ep;
   final List<Episode> list;
 
@@ -57,7 +59,11 @@ class _PlayerPageState extends State<PlayerPage> {
     SystemChrome.setSystemUIChangeCallback((visible) async {
       if (visible) await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     });
-    _setup();
+    if (widget.localFile != null) {
+      _loadLocal(widget.localFile!);
+    } else {
+      _setup();
+    }
   }
 
   List<Episode> get _episodeSequence {
@@ -215,6 +221,48 @@ class _PlayerPageState extends State<PlayerPage> {
       setState(() {
         _msg = 'Player error: $e';
         _showPickInMsg = true;
+        _buffering = false;
+      });
+    }
+  }
+
+  Future<void> _loadLocal(File file) async {
+    setState(() {
+      _msg = 'Loading offline video…';
+      _showPickInMsg = false;
+      _ended = false;
+      _buffering = true;
+      _cur = null;
+      _srcs = const [];
+    });
+    final old = _player;
+    old?.removeListener(_onPlayerChanged);
+    if (old != null) await old.dispose();
+    final controller = VideoPlayerController.file(file);
+    _player = controller;
+    try {
+      await controller.initialize();
+      if (!mounted || _player != controller) return;
+      final landscape = controller.value.size.width >= controller.value.size.height;
+      await SystemChrome.setPreferredOrientations(landscape
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+      await controller.setLooping(false);
+      await controller.setPlaybackSpeed(_rate);
+      _transitioning = false;
+      controller.addListener(_onPlayerChanged);
+      setState(() {
+        _msg = null;
+        _buffering = false;
+      });
+      await controller.play();
+      if (mounted) setState(() {});
+    } catch (e) {
+      _transitioning = false;
+      if (!mounted) return;
+      setState(() {
+        _msg = 'Offline playback error: $e';
+        _showPickInMsg = false;
         _buffering = false;
       });
     }
