@@ -13,13 +13,8 @@ import 'store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.stratus.music.playback',
-    androidNotificationChannelName: 'JioSaavn Music',
-    androidNotificationOngoing: true,
-  );
-  await app.init();
-  await DownloadService.instance.loadSettings();
+  try { await app.init().timeout(const Duration(seconds: 8)); } catch (_) {}
+  try { await DownloadService.instance.loadSettings().timeout(const Duration(seconds: 5)); } catch (_) {}
   runApp(const StratusApp());
 }
 
@@ -55,7 +50,7 @@ class StratusApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: app,
       builder: (context, _) => MaterialApp(
-        title: 'Stratus',
+        title: 'MovieFox',
         debugShowCheckedModeBanner: false,
         themeMode: app.theme,
         theme: _theme(Brightness.light),
