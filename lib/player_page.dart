@@ -124,7 +124,7 @@ class _PlayerPageState extends State<PlayerPage> {
         }
         _transitioning = false;
         if (mounted) setState(() {
-          _msg = 'None of the available Story TV qualities could be played on this device.';
+          _msg = 'None of the available stream qualities could be played on this device.';
           _showPickInMsg = true;
           _buffering = false;
         });
