@@ -128,8 +128,14 @@ class JioSaavnPlayer {
   JioSaavnPlayer._();
   static final instance = JioSaavnPlayer._();
   AudioPlayer? _audio;
+  Future<AudioPlayer>? _playerInit;
   AudioPlayer get audio => _audio ?? (throw StateError('Music player is not initialized'));
-  AudioPlayer _createAudioPlayer() {
+  Future<AudioPlayer> _createAudioPlayerOnce() {
+    // Share one in-flight initialization across simultaneous taps/screens.
+    return _playerInit ??= _initializeAudioPlayer();
+  }
+  Future<AudioPlayer> _initializeAudioPlayer() async {
+    await _ensureBackgroundAudio();
     final player = AudioPlayer();
     player.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) next();
@@ -145,7 +151,7 @@ class JioSaavnPlayer {
   SaavnSong? get current => index >= 0 && index < queue.length ? queue[index] : null;
   Future<void> playList(List<SaavnSong> songs, {int start = 0}) async {
     if (songs.isEmpty) return;
-    await _ensureBackgroundAudio();
+    await _createAudioPlayerOnce();
     queue..clear()..addAll(songs); index = start.clamp(0, queue.length - 1).toInt(); revision.value++; await playCurrent();
   }
   Future<String> resolveAudioUrl(SaavnSong song, String quality) async {
@@ -159,29 +165,20 @@ class JioSaavnPlayer {
   }
   static Future<void>? _backgroundAudioInit;
   Future<void> _ensureBackgroundAudio() async {
-    // just_audio_background must initialize BEFORE AudioPlayer is constructed.
-    // The old lazy implementation created AudioPlayer in the singleton constructor,
-    // then initialized the background handler afterward, breaking playback.
-    _backgroundAudioInit ??= () async {
-      try {
-        await JustAudioBackground.init(
-          androidNotificationChannelId: 'app.moviefox.music.playback',
-          androidNotificationChannelName: 'MovieFox Music',
-          androidNotificationOngoing: true,
-        ).timeout(const Duration(seconds: 8));
-      } catch (_) {
-        // Keep foreground playback available even if notification service setup fails.
-      }
-    }();
+    // Initialize the notification handler once, before the single AudioPlayer.
+    _backgroundAudioInit ??= JustAudioBackground.init(
+      androidNotificationChannelId: 'app.moviefox.music.playback',
+      androidNotificationChannelName: 'MovieFox Music',
+      androidNotificationOngoing: true,
+    ).timeout(const Duration(seconds: 8));
     await _backgroundAudioInit;
-    _audio ??= _createAudioPlayer();
   }
   Future<void> _setSongSource(SaavnSong song, String url) async {
-    await _ensureBackgroundAudio();
+    await _createAudioPlayerOnce();
     await audio.setAudioSource(AudioSource.uri(Uri.parse(url), headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'}, tag: MediaItem(id: song.id, album: song.album, title: song.title, artist: song.artist, artUri: Uri.tryParse(song.image))));
   }
   Future<void> playOffline(SaavnSong song, String localUri) async {
-    await _ensureBackgroundAudio();
+    await _createAudioPlayerOnce();
     queue..clear()..add(song); index = 0; revision.value++;
     await audio.setAudioSource(AudioSource.uri(Uri.parse(localUri), tag: MediaItem(id: song.id, album: song.album, title: song.title, artist: song.artist, artUri: Uri.tryParse(song.image))));
     await audio.play();
