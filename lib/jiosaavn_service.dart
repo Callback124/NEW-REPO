@@ -11,9 +11,9 @@ class SaavnSong {
   factory SaavnSong.fromJson(Map raw) {
     final more = raw['more_info'] is Map ? raw['more_info'] as Map : const {};
     final artists = more['artistMap'] is Map ? more['artistMap']['primary_artists'] : null;
-    final artist = artists is List ? artists.map((e) => e is Map ? e['name'] : e).where((e) => e != null).join(', ') : (raw['primary_artists'] ?? raw['singers'] ?? raw['artist'] ?? '');
+    final artist = artists is List ? artists.map((e) => e is Map ? e['name'] : e).where((e) => e != null).join(', ') : (raw['primary_artists'] ?? raw['singers'] ?? raw['artist'] ?? more['singers'] ?? '');
     var image = (raw['image'] ?? raw['album_image'] ?? '').toString().replaceAll('150x150', '500x500').replaceAll('50x50', '500x500').replaceAll('http://', 'https://');
-    return SaavnSong(id: (raw['id'] ?? raw['songid'] ?? '').toString(), title: saavnClean(raw['title'] ?? raw['song'] ?? 'Unknown song'), artist: saavnClean(artist).isEmpty ? 'Unknown artist' : saavnClean(artist), album: saavnClean(raw['album'] ?? ''), image: image, duration: int.tryParse((raw['duration'] ?? 0).toString()) ?? 0, encryptedUrl: (raw['encrypted_media_url'] ?? '').toString(), lyricsId: (more['lyrics_id'] ?? raw['lyrics_id'] ?? '').toString(), albumId: (raw['albumid'] ?? more['album_id'] ?? '').toString());
+    return SaavnSong(id: (raw['id'] ?? raw['songid'] ?? '').toString(), title: saavnClean(raw['title'] ?? raw['song'] ?? 'Unknown song'), artist: saavnClean(artist).isEmpty ? 'Unknown artist' : saavnClean(artist), album: saavnClean(raw['album'] ?? ''), image: image, duration: int.tryParse((raw['duration'] ?? 0).toString()) ?? 0, encryptedUrl: (raw['encrypted_media_url'] ?? more['encrypted_media_url'] ?? more['encrypted_media_url_hq'] ?? '').toString(), lyricsId: (more['lyrics_id'] ?? raw['lyrics_id'] ?? '').toString(), albumId: (raw['albumid'] ?? more['album_id'] ?? '').toString());
   }
 }
 String saavnClean(dynamic value) {
@@ -56,15 +56,46 @@ class JioSaavnApi {
     return rows is List ? rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : [];
   }
   Future<List<SaavnSection>> home() async {
-    final data = await call('webapi.getLaunchData');
-    final root = data is Map ? data : <String, dynamic>{};
+    final launchFuture = call('webapi.getLaunchData');
+    final artistsFuture = call('social.getTopArtists', {'p': '1', 'n': '50'});
+    final popAlbumsFuture = call('search.getAlbumResults', {'q': 'Pop Hindi', 'p': '1', 'n': '15'});
+    final popHindiFuture = call('playlist.getDetails', {'listid': '1302009985', 'cc': 'in'});
+    final values = await Future.wait([launchFuture, artistsFuture, popAlbumsFuture, popHindiFuture]);
+    final root = values[0] is Map ? Map<String, dynamic>.from(values[0] as Map) : <String, dynamic>{};
     final sections = <SaavnSection>[];
-    void add(String title, dynamic raw) {
-      if (raw is List) { final rows = raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(); if (rows.isNotEmpty) sections.add(SaavnSection(title, rows)); }
+    List<Map<String, dynamic>> rows(dynamic raw) {
+      if (raw is Map) raw = raw['songs'] ?? raw['results'] ?? raw['data'] ?? raw['list'] ?? raw['albums'] ?? raw['playlists'] ?? raw['items'] ?? raw['browse_discover'];
+      if (raw is! List) return [];
+      return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     }
-    add('Trending Now', root['new_trending']); add('Editorial Picks', root['top_playlists']); add('New Trending Albums', root['new_albums']); add('Top Charts', root['charts']); add('Genres & Moods', root['browse_discover']);
-    for (final key in ['promo:vx:data:68','promo:vx:data:112','promo:vx:data:107','promo:vx:data:185','promo:vx:data:211']) {
-      add(key.contains('68') ? 'Free Hits' : (key.contains('112') || key.contains('107') ? 'Devotional / Bhakti' : 'Best of 90s'), root[key]);
+    void add(String title, dynamic raw) {
+      final items = rows(raw);
+      if (items.isNotEmpty) sections.add(SaavnSection(title, items));
+    }
+    add('Trending Now', root['new_trending']);
+    add('Editorial Picks', root['top_playlists']);
+    add('New Releases: Pop Hindi', values[3]);
+    add('New Albums', root['new_albums']);
+    add('Pop Hindi Albums', values[2]);
+    add('Top Charts', root['charts']);
+    add('Genres & Moods', root['browse_discover']);
+    final artistData = values[1];
+    final artistRows = artistData is Map ? (artistData['top_artists'] ?? artistData['artists'] ?? artistData['results']) : artistData;
+    add('Top Artists', artistRows);
+    for (final entry in root.entries) {
+      final key = entry.key.toLowerCase();
+      if (!key.contains('promo')) continue;
+      final label = key.contains('68') ? 'Free Hits' : (key.contains('112') || key.contains('107') ? 'Devotional / Bhakti' : (key.contains('185') || key.contains('211') ? 'Best of 90s' : ''));
+      if (label.isNotEmpty && !sections.any((s) => s.title == label)) add(label, entry.value);
+    }
+    if (!sections.any((s) => s.title == 'Free Hits')) {
+      try { final d = await call('search.getPlaylistResults', {'q': 'Free Hits', 'p': '1', 'n': '20'}); add('Free Hits', d); } catch (_) {}
+    }
+    if (!sections.any((s) => s.title == 'Devotional / Bhakti')) {
+      try { final d = await call('search.getPlaylistResults', {'q': 'Bhakti', 'p': '1', 'n': '20'}); add('Devotional / Bhakti', d); } catch (_) {}
+    }
+    if (!sections.any((s) => s.title == 'Best of 90s')) {
+      try { final d = await call('search.getPlaylistResults', {'q': '90s Bollywood', 'p': '1', 'n': '20'}); add('Best of 90s', d); } catch (_) {}
     }
     return sections;
   }
@@ -108,7 +139,7 @@ class JioSaavnPlayer {
   }
   Future<String> _resolve(SaavnSong song, String quality) async {
     var encrypted = song.encryptedUrl;
-    if (encrypted.isEmpty) { final d = await api.songDetails(song.id); encrypted = (d['encrypted_media_url'] ?? '').toString(); }
+    if (encrypted.isEmpty) { final d = await api.songDetails(song.id); final more = d['more_info']; encrypted = (d['encrypted_media_url'] ?? (more is Map ? more['encrypted_media_url'] : null) ?? '').toString(); }
     if (encrypted.isEmpty) throw Exception('Audio URL not available');
     final decrypted = DES(key: '38346591'.codeUnits, mode: DESMode.ECB).decrypt(base64.decode(encrypted.trim()));
     final padding = decrypted.isEmpty ? 0 : decrypted.last;
