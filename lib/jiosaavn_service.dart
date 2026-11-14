@@ -68,7 +68,7 @@ class JioSaavnApi {
     }
     return sections;
   }
-  Future<List<SaavnSong>> albumSongs(String id, {bool playlist = false}) async => _songList(await call(playlist ? 'playlist.getDetails' : 'content.getAlbumDetails', {playlist ? 'listid' : 'albumid': id, 'cc': 'in'}));
+  Future<List<SaavnSong>> albumSongs(String id, {bool playlist = false}) async => _songList(await call(playlist ? 'playlist.getDetails' : 'content.getAlbumDetails', {(playlist ? 'listid' : 'albumid'): id, 'cc': 'in'}));
   Future<Map<String, dynamic>> songDetails(String id) async {
     final data = await call('song.getDetails', {'pids': id, 'cc': 'in'});
     if (data is Map) { final value = data[id]; if (value is Map) return Map<String, dynamic>.from(value); if (data['songs'] is List && (data['songs'] as List).isNotEmpty) return Map<String, dynamic>.from(data['songs'][0] as Map); }
