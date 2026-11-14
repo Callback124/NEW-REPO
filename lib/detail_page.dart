@@ -74,7 +74,7 @@ class _DetailPageState extends State<DetailPage> {
           final d = snap.data ?? widget.item;
           final err = snap.error;
           final eps = d.episodes;
-          final isStoryTv = d.pid == 'storytv';
+          final isStoryTv = d.pid == 'storytv' || d.pid == 'freereels';
           final seasons = (eps.map((e) => e.season).toSet().toList()..sort());
           if (eps.isNotEmpty) _season ??= (_lastEp(d) ?? eps.first).season;
           final list = eps.where((e) => e.season == _season).toList();
