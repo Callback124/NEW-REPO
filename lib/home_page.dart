@@ -260,7 +260,7 @@ class _StoryTvGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: items.length,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 205, childAspectRatio: .43,
+        maxCrossAxisExtent: 205, childAspectRatio: .50,
         mainAxisSpacing: 14, crossAxisSpacing: 12,
       ),
       itemBuilder: (context, i) {
