@@ -99,7 +99,7 @@ class _DownloadPageState extends State<DownloadPage> {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Could not read Story TV quality playlist.');
     }
-    final lines = response.body.split(RegExp(r'\\r?\\n'));
+    final lines = response.body.split(RegExp(r'\r?\n'));
     final result = <Source>[];
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
@@ -107,8 +107,8 @@ class _DownloadPageState extends State<DownloadPage> {
       var next = i + 1;
       while (next < lines.length && (lines[next].trim().isEmpty || lines[next].trim().startsWith('#'))) { next++; }
       if (next >= lines.length) continue;
-      final resolution = RegExp(r'RESOLUTION=\\d+x(\\d+)', caseSensitive: false).firstMatch(line);
-      final bandwidth = RegExp(r'BANDWIDTH=(\\d+)', caseSensitive: false).firstMatch(line);
+      final resolution = RegExp(r'RESOLUTION=\d+x(\d+)', caseSensitive: false).firstMatch(line);
+      final bandwidth = RegExp(r'BANDWIDTH=(\d+)', caseSensitive: false).firstMatch(line);
       var tier = resolution == null ? 0 : int.tryParse(resolution.group(1)!) ?? 0;
       if (tier == 0 && bandwidth != null) {
         final b = int.tryParse(bandwidth.group(1)!) ?? 0;
