@@ -415,11 +415,6 @@ class _PlayerPageState extends State<PlayerPage> {
             },
           ),
       ] else ...[
-        if (_item.pid == 'storytv')
-          const ListTile(
-            title: Text('Auto · adaptive quality'),
-            subtitle: Text('Video quality tracks are not available on this player platform'),
-          ),
         for (final s in _srcs)
           ListTile(
             title: Text(s.name),
