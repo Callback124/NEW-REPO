@@ -99,9 +99,8 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     final providers = app.scope();
     if (providers.isEmpty) return;
     try {
-      final activeProviders = app.scope();
-final active = activeProviders.isEmpty ? null : activeProviders.first;
-final values = active?.kind == 'storytv'
+      final active = providers.first;
+      final values = active.kind == 'storytv'
           ? await StoryTvAdapter().suggestions(q)
           : await MovieBoxAdapter().suggestions(q);
       if (!mounted || _ctrl.text.trim() != q) return;
