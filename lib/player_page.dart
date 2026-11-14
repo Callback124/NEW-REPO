@@ -967,91 +967,116 @@ class _PlayerPageState extends State<PlayerPage> {
         onLongPressStart: _isLandscape ? _onGestureLongPressStart : null,
         onLongPressEnd: _isLandscape ? _onGestureLongPressEnd : null,
         child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (_player != null && _player!.value.isInitialized)
-            SizedBox.expand(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final videoSize = _player!.value.size;
-                  return ClipRect(
-                    child: FittedBox(
-                      fit: _fits[_fitI].$1,
-                      alignment: Alignment.center,
-                      child: SizedBox(
-                        width: videoSize.width,
-                        height: videoSize.height,
-                        child: VideoPlayer(_player!),
+          fit: StackFit.expand,
+          children: [
+            if (_player != null && _player!.value.isInitialized)
+              SizedBox.expand(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final videoSize = _player!.value.size;
+                    return ClipRect(
+                      child: FittedBox(
+                        fit: _fits[_fitI].$1,
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: videoSize.width,
+                          height: videoSize.height,
+                          child: VideoPlayer(_player!),
+                        ),
                       ),
+                    );
+                  },
+                ),
+              )
+            else
+              const ColoredBox(color: Colors.black),
+            IgnorePointer(
+              ignoring: !showUi,
+              child: AnimatedOpacity(
+                opacity: showUi ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: _controls(context, msgOn, next),
+              ),
+            ),
+            if (_isLandscape && _indicatorLabel != null)
+              IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                  );
-                },
-              ),
-            )
-          else
-            const ColoredBox(color: Colors.black),
-          const SizedBox.expand(),
-          IgnorePointer(
-            ignoring: !showUi,
-            child: AnimatedOpacity(
-              opacity: showUi ? 1 : 0,
-              duration: const Duration(milliseconds: 200),
-              child: _controls(context, msgOn, next),
-            ),          if (_isLandscape && _indicatorLabel != null)
-            IgnorePointer(
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_indicatorIcon != null)
-                        Icon(_indicatorIcon, color: Colors.white, size: 30),
-                      const SizedBox(height: 6),
-                      Text(_indicatorLabel!,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                      if (_gestureMode == 'brightness' || _gestureMode == 'volume') ...[
-                        const SizedBox(height: 9),
-                        SizedBox(width: 150, child: LinearProgressIndicator(
-                          value: _indicatorValue,
-                          minHeight: 4,
-                          backgroundColor: Colors.white30,
-                          color: Colors.white,
-                        )),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_indicatorIcon != null)
+                          Icon(_indicatorIcon, color: Colors.white, size: 30),
+                        const SizedBox(height: 6),
+                        Text(
+                          _indicatorLabel!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (_gestureMode == 'brightness' || _gestureMode == 'volume') ...[
+                          const SizedBox(height: 9),
+                          SizedBox(
+                            width: 150,
+                            child: LinearProgressIndicator(
+                              value: _indicatorValue,
+                              minHeight: 4,
+                              backgroundColor: Colors.white30,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          if (_isLandscape && _seekPreview != null)
-            IgnorePointer(
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(14)),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_seekDeltaSeconds >= 0 ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
-                        color: Colors.white, size: 34),
-                      const SizedBox(height: 5),
-                      Text(_previewTime(Duration(seconds: _seekDeltaSeconds.round())),
-                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
-                      Text(_fmt(_seekPreview!), style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                    ],
+            if (_isLandscape && _seekPreview != null)
+              IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _seekDeltaSeconds >= 0
+                              ? Icons.fast_forward_rounded
+                              : Icons.fast_rewind_rounded,
+                          color: Colors.white,
+                          size: 34,
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          _previewTime(Duration(seconds: _seekDeltaSeconds.round())),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          _fmt(_seekPreview!),
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
