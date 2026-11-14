@@ -7,8 +7,21 @@ import 'providers.dart';
 import 'store.dart';
 import 'widgets.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,6 +30,7 @@ class HomePage extends StatelessWidget {
       builder: (context, _) {
         final ps = app.scope();
         return CustomScrollView(
+          controller: _scrollController,
           slivers: [
             SliverAppBar(
               floating: true,
@@ -50,6 +64,7 @@ class HomePage extends StatelessWidget {
                   key: ValueKey(ps[i].id),
                   provider: ps[i],
                   showName: ps.length > 1,
+                  scrollController: _scrollController,
                 ),
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -86,9 +101,10 @@ class HomePage extends StatelessWidget {
 }
 
 class _ProviderSection extends StatefulWidget {
-  const _ProviderSection({super.key, required this.provider, required this.showName});
+  const _ProviderSection({super.key, required this.provider, required this.showName, required this.scrollController});
   final ProviderDef provider;
   final bool showName;
+  final ScrollController scrollController;
 
   @override
   State<_ProviderSection> createState() => _ProviderSectionState();
@@ -132,7 +148,7 @@ class _ProviderSectionState extends State<_ProviderSection> {
               );
             }
             return p.kind == 'storytv'
-                ? _StoryTvGrid(items: shelves.expand((s) => s.items).toList())
+                ? _StoryTvGrid(items: shelves.expand((s) => s.items).toList(), provider: p, scrollController: widget.scrollController)
                 : Column(children: [for (final s in shelves) ShelfRow(shelf: s)]);
           },
         ),
@@ -251,70 +267,103 @@ Future<void> resumeProgress(BuildContext context, Progress pr) async {
   }
 }
 
-class _StoryTvGrid extends StatelessWidget {
-  const _StoryTvGrid({required this.items});
+class _StoryTvGrid extends StatefulWidget {
+  const _StoryTvGrid({
+    required this.items,
+    required this.provider,
+    required this.scrollController,
+  });
+
   final List<Item> items;
+  final ProviderDef provider;
+  final ScrollController scrollController;
+
+  @override
+  State<_StoryTvGrid> createState() => _StoryTvGridState();
+}
+
+class _StoryTvGridState extends State<_StoryTvGrid> {
+  late final List<Item> _items = [...widget.items];
+  int _page = 0;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.scrollController.addListener(_onScroll);
+    _hasMore = widget.items.length >= 40;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
+  }
+
+  @override
+  void didUpdateWidget(covariant _StoryTvGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollController != widget.scrollController) {
+      oldWidget.scrollController.removeListener(_onScroll);
+      widget.scrollController.addListener(_onScroll);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.scrollController.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!mounted || !widget.scrollController.hasClients ||
+        widget.scrollController.position.extentAfter > 650) return;
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    _loadingMore = true;
+    try {
+      final next = await StoryTvAdapter().explorePage(widget.provider, page: _page + 1);
+      if (!mounted) return;
+      final seen = _items.map((e) => e.id).toSet();
+      final fresh = next.items.where((e) => seen.add(e.id)).toList();
+      setState(() {
+        _items.addAll(fresh);
+        _page++;
+        _hasMore = next.hasMore && fresh.isNotEmpty;
+        _loadingMore = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-    child: GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 205, childAspectRatio: .50,
-        mainAxisSpacing: 14, crossAxisSpacing: 12,
-      ),
-      itemBuilder: (context, i) {
-        final item = items[i];
-        return InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => openDetail(context, item),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest),
-                      if (isHttp(item.poster))
-                        CachedNetworkImage(
-                          imageUrl: item.poster!,
-                          fit: BoxFit.cover,
-                          memCacheWidth: 360,
-                          memCacheHeight: 640,
-                          maxWidthDiskCache: 540,
-                          maxHeightDiskCache: 960,
-                          fadeInDuration: Duration.zero,
-                          fadeOutDuration: Duration.zero,
-                          placeholder: (_, __) => const Center(child: CircularProgressIndicator(strokeWidth: 1.5)),
-                          errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                        ),
-                      Positioned(
-                        left: 7, bottom: 7,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                            child: Text(item.corner ?? 'Mini Drama',
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            ],
+    child: Column(
+      children: [
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _items.length,
+          cacheExtent: 900,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 150,
+            childAspectRatio: .48,
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 12,
           ),
-        );
-      },
+          itemBuilder: (context, i) => PosterCard(
+            item: _items[i],
+            onTap: () => openDetail(context, _items[i]),
+          ),
+        ),
+        if (_loadingMore)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+      ],
     ),
   );
 }
