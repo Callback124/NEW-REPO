@@ -59,7 +59,7 @@ class _MusicPageState extends State<MusicPage> {
   ]));
   Widget _songTile(SaavnSong s,List<SaavnSong> list)=>ListTile(leading:ClipRRect(borderRadius:BorderRadius.circular(8),child:Image.network(s.image,width:50,height:50,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const Icon(Icons.music_note))),title:Text(s.title,maxLines:1),subtitle:Text(s.artist,maxLines:1),trailing:IconButton(icon:const Icon(Icons.more_vert),onPressed:()=>showModalBottomSheet<void>(context:context,builder:(ctx)=>SafeArea(child:Wrap(children:[
     ListTile(title:Text(s.title),subtitle:Text(s.artist)),
-    ListTile(leading:const Icon(Icons.play_arrow),title:const Text('Play next'),onTap:(){final p=JioSaavnPlayer.instance;p.queue.insert((p.index+1).clamp(0,p.queue.length),s);Navigator.pop(ctx);}),
+    ListTile(leading:const Icon(Icons.play_arrow),title:const Text('Play next'),onTap:(){final p=JioSaavnPlayer.instance;p.queue.insert((p.index+1).clamp(0,p.queue.length).toInt(),s);Navigator.pop(ctx);}),
     ListTile(leading:const Icon(Icons.queue_music),title:const Text('Add to queue'),onTap:(){JioSaavnPlayer.instance.queue.add(s);Navigator.pop(ctx);}),
     ListTile(leading:const Icon(Icons.album),title:const Text('View album'),onTap:(){Navigator.pop(ctx);showModalBottomSheet<void>(context:context,isScrollControlled:true,builder:(_)=>SaavnTracklistSheet(item:{'albumid':s.albumId,'title':s.album,'image':s.image},playlist:false));}),
   ])))),onTap:()=>play(list,list.indexOf(s)));
@@ -90,7 +90,7 @@ class _SaavnFullPlayerState extends State<SaavnFullPlayer>{
     const SizedBox(height:24),Row(children:[Expanded(child:Text(s.title,style:const TextStyle(color:Colors.white,fontSize:28,fontWeight:FontWeight.w700),maxLines:2,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Favorite saved in a later music update'))),icon:const Icon(Icons.favorite,color:Color(0xFF7CE8E7),size:30))]),
     Text(s.artist,style:const TextStyle(color:Colors.white60,fontSize:18)),const SizedBox(height:24),
     StreamBuilder<Duration>(stream:p.audio.positionStream,builder:(context,snap){final pos=snap.data??Duration.zero;final total=p.audio.duration??Duration(seconds:s.duration>0?s.duration:1);final max=total.inMilliseconds.toDouble().clamp(1,double.infinity);return Column(children:[
-      SliderTheme(data:SliderTheme.of(context).copyWith(activeTrackColor:_musicAccent,inactiveTrackColor:Colors.white54,thumbColor:_musicAccent,trackHeight:2),child:Slider(value:(pos.inMilliseconds/max).clamp(0,1),onChanged:(v)=>p.audio.seek(Duration(milliseconds:(v*max).round())))),
+      SliderTheme(data:SliderTheme.of(context).copyWith(activeTrackColor:_musicAccent,inactiveTrackColor:Colors.white54,thumbColor:_musicAccent,trackHeight:2),child:Slider(value:(pos.inMilliseconds/max).clamp(0,1).toDouble(),onChanged:(v)=>p.audio.seek(Duration(milliseconds:(v*max).round())))),
       Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(time(pos),style:const TextStyle(color:Colors.white38,fontSize:11)),Text(time(total),style:const TextStyle(color:Colors.white38,fontSize:11))]),
     ]);}),
     const Spacer(),Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
