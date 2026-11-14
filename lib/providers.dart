@@ -489,6 +489,9 @@ class MovieBoxAdapter extends Adapter {
             } else if (entry.value is Map || entry.value is List) {
               final keyLooksLikeQuality = RegExp(r'(4320|2160|1440|1080|720|540|480|360)\s*p?', caseSensitive: false).hasMatch(key);
               addUrl(entry.value, label: keyLooksLikeQuality ? key : meta, streamContext: streamContext);
+            } else if (entry.value is String && isHttp(entry.value.toString()) &&
+                RegExp(r'(4320|2160|1440|1080|720|540|480|360)\s*p?', caseSensitive: false).hasMatch(key)) {
+              addUrl(entry.value, label: key, streamContext: true);
             }
           }
           return;
