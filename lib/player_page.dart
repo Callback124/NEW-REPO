@@ -32,7 +32,6 @@ class _PlayerPageState extends State<PlayerPage> {
   late List<Episode> _episodes = widget.list;
   List<Source> _srcs = const [];
   List<VideoTrack> _storyTvTracks = const [];
-  bool _storyTvAutoQuality = true;
   String? _storyTvSelectedTrackId;
   final Set<String> _failedSourceUrls = <String>{};
   Source? _cur;
@@ -101,7 +100,6 @@ class _PlayerPageState extends State<PlayerPage> {
       _ended = false;
       _srcs = const [];
       _storyTvTracks = const [];
-      _storyTvAutoQuality = true;
       _storyTvSelectedTrackId = null;
       _cur = null;
     });
@@ -246,10 +244,15 @@ class _PlayerPageState extends State<PlayerPage> {
           }
           final sortedTracks = byTier.entries.toList()
             ..sort((a, b) => b.key.compareTo(a.key));
+          final availableTracks = sortedTracks.map((entry) => entry.value).toList();
+          if (availableTracks.isNotEmpty) {
+            // Default to the highest supported quality; do not leave Story TV in Auto.
+            await controller.selectVideoTrack(availableTracks.first);
+          }
+          if (!mounted || _player != controller) return false;
           setState(() {
-            _storyTvTracks = sortedTracks.map((entry) => entry.value).toList();
-            _storyTvAutoQuality = true;
-            _storyTvSelectedTrackId = null;
+            _storyTvTracks = availableTracks;
+            _storyTvSelectedTrackId = availableTracks.isEmpty ? null : availableTracks.first.id;
           });
         } catch (_) {
           // Keep Auto playback available if this platform cannot report tracks.
@@ -365,12 +368,11 @@ class _PlayerPageState extends State<PlayerPage> {
     final controller = _player;
     if (controller == null || !controller.value.isInitialized) return;
     try {
-      // null clears the ExoPlayer video override and restores adaptive quality.
+      if (track == null) return;
       await controller.selectVideoTrack(track);
       if (!mounted || _player != controller) return;
       setState(() {
-        _storyTvAutoQuality = track == null;
-        _storyTvSelectedTrackId = track?.id;
+        _storyTvSelectedTrackId = track.id;
       });
       final refreshed = await controller.getVideoTracks();
       if (!mounted || _player != controller) return;
@@ -391,15 +393,6 @@ class _PlayerPageState extends State<PlayerPage> {
     final useStoryTvTracks = _item.pid == 'storytv' && _storyTvTracks.isNotEmpty;
     _sheet('Sources', [
       if (useStoryTvTracks) ...[
-        ListTile(
-          title: const Text('Auto · adaptive quality'),
-          subtitle: const Text('Let ExoPlayer choose the best quality'),
-          trailing: _storyTvAutoQuality ? const Icon(Icons.check) : null,
-          onTap: () {
-            Navigator.pop(context);
-            _selectStoryTvQuality(null);
-          },
-        ),
         for (final track in _storyTvTracks)
           ListTile(
             title: Text(_storyTvTrackTitle(track)),
@@ -414,6 +407,11 @@ class _PlayerPageState extends State<PlayerPage> {
               _selectStoryTvQuality(track);
             },
           ),
+      ] else if (_item.pid == 'storytv') ...[
+        const ListTile(
+          title: Text('Quality options unavailable'),
+          subtitle: Text('This player did not expose HLS video tracks.'),
+        ),
       ] else ...[
         for (final s in _srcs)
           ListTile(
