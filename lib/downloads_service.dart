@@ -137,6 +137,10 @@ class DownloadService extends ChangeNotifier {
   }
 
 
+  Future<void> saveMergedToGallery(String localPath, String fileName) async {
+    await _channel.invokeMethod<bool>('saveMergedToGallery', {'path': localPath, 'fileName': fileName});
+  }
+
   Future<void> addMergedFile({
     required String title,
     required String fileName,
