@@ -597,10 +597,19 @@ class StoryTvAdapter extends Adapter {
   static final http.Client _client = http.Client();
   static final Map<String, Future<dynamic>> _cache = {};
   static Future<void>? _hindiFlight;
-  Future<void> _ensureHindi() => _hindiFlight ??= _client.post(
-    Uri.parse('$_base/userservice/v1/language/select?langId=2'),
-    headers: _apiHeaders, body: jsonEncode({'langId': 2}),
-  ).timeout(const Duration(seconds: 12)).then((_) {}).catchError((_) {}).whenComplete(() => _hindiFlight = null);
+  static bool _hindiReady = false;
+  Future<void> _ensureHindi() {
+    if (_hindiReady) return Future<void>.value();
+    return _hindiFlight ??= _client.post(
+      Uri.parse('$_base/userservice/v1/language/select?langId=2'),
+      headers: _apiHeaders, body: jsonEncode({'langId': 2}),
+    ).timeout(const Duration(seconds: 12)).then((r) {
+      if (r.statusCode < 200 || r.statusCode >= 300) {
+        throw ProviderError('Story TV Hindi language selection failed (undefined).');
+      }
+      _hindiReady = true;
+    }).whenComplete(() => _hindiFlight = null);
+  }
   Future<dynamic> _request(String path, {bool cache = false}) {
     final url = '$_base$path';
     if (cache && _cache.containsKey(url)) return _cache[url]!;
@@ -653,6 +662,7 @@ class StoryTvAdapter extends Adapter {
   Future<List<String>> suggestions(String query) async {
     final q=Uri.encodeComponent(query.trim());
     if(q.isEmpty) return [];
+    await _ensureHindi();
     final j=await _request('/searchservice/v1/search/$q');
     final data=j['data'] is Map ? j['data'] as Map : const {};
     final raw=data['content'] is List ? data['content'] as List : const [];
