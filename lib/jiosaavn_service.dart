@@ -145,18 +145,26 @@ class JioSaavnPlayer {
     if (encrypted.isEmpty) throw Exception('Audio URL not available');
     final decrypted = DES(key: '38346591'.codeUnits, mode: DESMode.ECB, paddingType: DESPaddingType.PKCS5).decrypt(base64.decode(encrypted.trim()));
     var url = utf8.decode(decrypted).trim();
-    url = url.replaceAll(RegExp(r'_\d+\.(mp4|m4a)'), '_$quality.mp4').replaceFirst('http://', 'https://');
+    url = url.replaceAllMapped(RegExp(r'_\d+\.(mp4|m4a)', caseSensitive: false), (m) => '_$quality.${m[1]}').replaceFirst('http://', 'https://');
     return url;
   }
   Future<void> playCurrent() async {
     final song = current; if (song == null) return;
-    try {
-      final url = await _resolve(song, bitrate);
-      await audio.setUrl(url, headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36'});
-      await audio.play();
-    } catch (e) {
-      if (bitrate == '320') { bitrate = '160'; final url = await _resolve(song, bitrate); await audio.setUrl(url); await audio.play(); } else { rethrow; }
+    Object? lastError;
+    final preferred = bitrate;
+    final qualities = <String>[preferred, ...['320', '160', '96'].where((q) => q != preferred)];
+    for (final quality in qualities) {
+      try {
+        final url = await _resolve(song, quality);
+        await audio.setUrl(url, headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'});
+        bitrate = quality;
+        await audio.play();
+        return;
+      } catch (e) {
+        lastError = e;
+      }
     }
+    throw Exception('Unable to play this JioSaavn track: $lastError');
   }
   Future<void> next() async { if (queue.isEmpty) return; index = (index + 1) % queue.length; revision.value++; await playCurrent(); }
   Future<void> previous() async { if (queue.isEmpty) return; if (audio.position > const Duration(seconds: 3)) { await audio.seek(Duration.zero); return; } index = (index - 1 + queue.length) % queue.length; revision.value++; await playCurrent(); }
