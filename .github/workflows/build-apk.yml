@@ -28,6 +28,16 @@ jobs:
           cp -r /tmp/shell/android ./android
           cp /tmp/shell/.metadata ./.metadata
 
+          # Set the launcher label without changing the stable Android application ID.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          s = re.sub(r'android:label="[^"]*"', 'android:label="MovieFox"', s, count=1)
+          p.write_text(s)
+          PY
+
           # FFmpegKit HTTPS requires Android API 24 or newer.
           python3 - <<'PY'
           from pathlib import Path
@@ -272,5 +282,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stratus-apk
+          name: MovieFox-apk
           path: build/app/outputs/flutter-apk/app-release.apk
