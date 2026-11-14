@@ -336,7 +336,8 @@ class _DownloadPageState extends State<DownloadPage> {
       if (DownloadService.instance.downloadLocation == 'both') {
         await DownloadService.instance.saveMergedToGallery(output, fileName);
       }
-      await DownloadService.instance.updateMergeTask(taskId, completed: sorted.length, total: sorted.length, phase: 'Completed', status: 'complete', localUri: File(output).uri.toString(), fileName: fileName);
+      final outputSize = await File(output).length();
+      await DownloadService.instance.updateMergeTask(taskId, completed: outputSize, total: outputSize, phase: 'Completed', status: 'complete', localUri: File(output).uri.toString(), fileName: fileName);
     } catch (e) {
       await DownloadService.instance.updateMergeTask(taskId, completed: 0, total: sorted.length, phase: 'Failed: $e', status: 'failed', reason: 1);
     } finally {
