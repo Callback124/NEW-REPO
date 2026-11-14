@@ -94,7 +94,7 @@ abstract class Adapter {
   Future<List<Source>> sources(ProviderDef p, Item item, Episode? ep);
 }
 
-Adapter adapterFor(ProviderDef p) => switch (p.kind) {
+Adapter adapterFor(ProviderDef p) => switch (p.kind) {\n      'storytv' => StoryTvAdapter(),
       'moviebox' => MovieBoxAdapter(),
       'stremio' => StremioAdapter(),
       'json' => JsonAdapter(),
@@ -575,7 +575,119 @@ class MovieBoxAdapter extends Adapter {
   }
 }
 
-/* ---------- Stremio-compatible addons ---------- */
+
+/* ---------- Story TV Hindi micro-drama provider ---------- */
+class StoryTvAdapter extends Adapter {
+  static const _base = 'https://elitemods-tv.onrender.com';
+  static const _apiToken = 'eyJhbGciOiJIUzI1NiJ9.eyJjcmVhdGVkRGF0ZSI6IkZyaSBKdW4gMTIgMDc6MDQ6MTAgVVRDIDIwMjYiLCJzZXNzaW9uSWQiOiIxNTI0MDExNDMiLCJkZXZpY2VJZCI6IjI4MDhkNDliN2UwOGI3MTYiLCJzdWIiOiIxMTYwMDQ2NDciLCJleHAiOjE3ODE1MDcwNTB9._GKqF_5WtYkgAIJVhkt3L27t9fvgLkFtfgaOLSPsrOA';
+  static const _apiHeaders = {
+    'Authorization': 'Bearer ' + _apiToken,
+    'appVersion': '62', 'os': 'Android 13 (API 33)',
+    'deviceId': 'a6229bad5c179d51', 'platform': '0',
+    'iamsinu': 'iamsinu', 'network_type': 'WIFI',
+    'Accept': 'application/json', 'Content-Type': 'application/json',
+    'User-Agent': 'ktor-client',
+    'Referer': 'https://storytv.asia/', 'Origin': 'https://storytv.asia',
+  };
+  static const _playerHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+    'Referer': 'https://storytv.asia/', 'Origin': 'https://storytv.asia',
+    'Accept': '*/*',
+  };
+  static final http.Client _client = http.Client();
+  static final Map<String, Future<dynamic>> _cache = {};
+  Future<dynamic> _request(String path, {bool cache = false}) {
+    final url = '$_base$path';
+    if (cache && _cache.containsKey(url)) return _cache[url]!;
+    final f = _client.get(Uri.parse(url), headers: _apiHeaders)
+      .timeout(const Duration(seconds: 18)).then((r) {
+        if (r.statusCode != 200) throw ProviderError('Story TV HTTP ${r.statusCode}');
+        final j = jsonDecode(utf8.decode(r.bodyBytes));
+        if (j is Map && j['code'] != null && !['0','200'].contains(j['code'].toString())) {
+          throw ProviderError('Story TV API error: ${j['message'] ?? j['code']}');
+        }
+        return j;
+      });
+    if (cache) _cache[url] = f.catchError((e) { _cache.remove(url); throw e; });
+    return cache ? _cache[url]! : f;
+  }
+  Map _show(Map raw) {
+    final data = raw['data'] is Map ? raw['data'] as Map : raw;
+    return data['showInfo'] is Map ? data['showInfo'] as Map : data;
+  }
+  Item _item(ProviderDef p, Map raw) {
+    final show = _show(raw);
+    final meta = show['metadata'] is Map ? show['metadata'] as Map : const {};
+    final id = (show['id'] ?? raw['id'] ?? '').toString();
+    return Item(pid:p.id, id:id, type:'series',
+      title:(show['title'] ?? raw['title'] ?? 'Untitled').toString(),
+      poster:(show['imageUrl'] ?? raw['imageUrl'] ?? '').toString(),
+      bg:(show['imageUrl'] ?? raw['imageUrl'] ?? '').toString(),
+      plot:(show['description'] ?? '').toString(),
+      genres:[(meta['genre'] ?? show['genre'] ?? 'Drama').toString()],
+      subjectType:7, corner:'${show['numOfEpisodes'] ?? 0} Episodes');
+  }
+  @override Future<List<Shelf>> home(ProviderDef p) async {
+    final j=await _request('/feedservice/v2/explore/shows?page=0&size=40&intCount=0');
+    final data=j['data'] is Map ? j['data'] as Map : const {};
+    final raw=data['content'] is List ? data['content'] as List : const [];
+    final items=raw.whereType<Map>().map(_item.bind(p)).where((x)=>x.id.isNotEmpty).toList();
+    if(items.isEmpty) throw ProviderError('Story TV returned no Hindi dramas.');
+    return [Shelf('Hindi Mini Dramas',items)];
+  }
+  @override Future<List<Item>> search(ProviderDef p,String query) async {
+    final q=Uri.encodeComponent(query.trim());
+    if(q.isEmpty) return [];
+    final j=await _request('/searchservice/v1/search/$q');
+    final data=j['data'] is Map ? j['data'] as Map : const {};
+    final raw=data['content'] is List ? data['content'] as List : const [];
+    return raw.whereType<Map>().map((m)=>_item(p,m)).where((x)=>x.id.isNotEmpty).toList();
+  }
+  Future<List<String>> suggestions(String query) async {
+    final q=Uri.encodeComponent(query.trim());
+    if(q.isEmpty) return [];
+    final j=await _request('/searchservice/v1/search/$q');
+    final data=j['data'] is Map ? j['data'] as Map : const {};
+    final raw=data['content'] is List ? data['content'] as List : const [];
+    final out=<String>{};
+    for(final m in raw.whereType<Map>()) {
+      if((m['title'] ?? '').toString().isNotEmpty) out.add(m['title'].toString());
+      final meta=m['metadata'] is Map ? m['metadata'] as Map : const {};
+      for(final tag in (meta['tags'] as List? ?? const [])) { if(tag.toString().isNotEmpty) out.add(tag.toString()); }
+    }
+    return out.take(8).toList();
+  }
+  @override Future<Item> detail(ProviderDef p,Item item) async {
+    final j=await _request('/feedservice/v1/episode/list/${Uri.encodeComponent(item.id)}',cache:true);
+    final d=j['data'] is Map ? j['data'] as Map : const {};
+    final count=(d['epCount'] as num?)?.toInt() ?? 0;
+    final raw=d['data'] is List ? d['data'] as List : const [];
+    final byIndex=<int,Map>{for(final x in raw.whereType<Map>()) ((x['index'] as num?)?.toInt() ?? 0):x};
+    final eps=<Episode>[];
+    for(var n=1;n<=count;n++){
+      final x=byIndex[n];
+      eps.add(Episode(id:n.toString(),season:1,episode:n,
+        title:(x?['epTitle'] ?? 'Episode $n').toString()));
+    }
+    return item.copyWith(title:d['showTitle']?.toString() ?? item.title,
+      genres:[(d['genre'] ?? item.genres.firstOrNull ?? 'Drama').toString()],
+      episodes:eps, plot:'$count episodes');
+  }
+  @override Future<List<Source>> sources(ProviderDef p,Item item,Episode? ep) async {
+    final number=ep?.episode ?? int.tryParse(ep?.id ?? '') ?? 1;
+    final cursor=((number-1)~/5)*5;
+    // Always request the current episode's batch afresh; signed CDN URLs are not reused.
+    final j=await _request('/feedservice/v1/episode/metadata/${Uri.encodeComponent(item.id)}?cursor=$cursor&dir=NEXT');
+    final d=j['data'] is Map ? j['data'] as Map : const {};
+    final raw=d['content'] is List ? d['content'] as List : const [];
+    Map? match;
+    for(final x in raw.whereType<Map>()) { if((x['index'] as num?)?.toInt()==number) {match=x;break;} }
+    final url=match?['epsUrl']?.toString() ?? '';
+    if(!isHttp(url)) throw ProviderError('Story TV stream URL not available for episode $number.');
+    return [Source.clean(name:'Auto · HLS',url:url,headers:_playerHeaders)];
+  }
+}
+\n/* ---------- Stremio-compatible addons ---------- */
 
 class StremioAdapter extends Adapter {
   String _base(ProviderDef p) => p.url!
