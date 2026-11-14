@@ -1,8 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'downloads_service.dart';
 import 'jiosaavn_service.dart';
 
 const _musicAccent = Color(0xFF38DAD5);
+
+Future<void> _downloadSaavn(BuildContext context, SaavnSong song) async {
+  final quality = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Padding(padding: const EdgeInsets.all(16), child: Text('Download quality', style: Theme.of(ctx).textTheme.titleLarge)),
+      for (final q in ['320', '160', '96'])
+        ListTile(leading: const Icon(Icons.audio_file), title: Text('$q kbps'), onTap: () => Navigator.pop(ctx, q)),
+      const SizedBox(height: 8),
+    ])),
+  );
+  if (quality == null) return;
+  try {
+    final url = await JioSaavnPlayer.instance.resolveAudioUrl(song, quality);
+    final safe = song.title.replaceAll(RegExp(r'[^a-zA-Z0-9 _-]'), '').trim();
+    await DownloadService.instance.enqueue(
+      url: url,
+      title: song.title,
+      fileName: '${safe.isEmpty ? 'JioSaavn Song' : safe}_${quality}kbps.mp4',
+      headers: const {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'},
+    );
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Downloading ${song.title} · $quality kbps')));
+  } catch (e) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+  }
+}
 
 Future<void> _playSaavnAndOpen(BuildContext context, List<SaavnSong> songs, {int start = 0}) async {
   if (songs.isEmpty) return;
@@ -45,11 +73,11 @@ class _MusicPageState extends State<MusicPage> {
   void open(Map<String,dynamic> m){final t=type(m);if(t=='artist'){Navigator.push(context,MaterialPageRoute(builder:(_)=>SaavnArtistPage(item:m)));}else if(t=='song'){final s=SaavnSong.fromJson(m);play([s],0);}else{showModalBottomSheet<void>(context:context,isScrollControlled:true,showDragHandle:true,builder:(_)=>SaavnTracklistSheet(item:m,playlist:t=='playlist'));}}
   Future<void> play(List<SaavnSong> list,int i)async{try{await JioSaavnPlayer.instance.playList(list,start:i);if(mounted)Navigator.push(context,MaterialPageRoute(builder:(_)=>const SaavnFullPlayer()));}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Playback failed: '+e.toString())));}}
   @override
-  Widget build(BuildContext context)=>CustomScrollView(slivers:[
+  Widget build(BuildContext context)=>PopScope(canPop: !searching,onPopInvokedWithResult: (didPop, result){if(!didPop && searching){setState(()=>searching=false);}},child:CustomScrollView(slivers:[
     SliverAppBar(floating:true,title:const Text('Music',style:TextStyle(fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:()=>setState(()=>searching=!searching),icon:const Icon(Icons.search))]),
     if(searching)SliverToBoxAdapter(child:Padding(padding:const EdgeInsets.fromLTRB(16,0,16,12),child:Column(children:[
-      TextField(controller:query,textInputAction:TextInputAction.search,onSubmitted:search,decoration:InputDecoration(hintText:'Songs, albums, artists, playlists',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(onPressed:()=>search(query.text),icon:const Icon(Icons.arrow_forward)),filled:true,border:OutlineInputBorder(borderRadius:BorderRadius.circular(14),borderSide:BorderSide.none))),
-      const SizedBox(height:8),SingleChildScrollView(scrollDirection:Axis.horizontal,child:Row(children:List.generate(4,(i)=>Padding(padding:const EdgeInsets.only(right:8),child:ChoiceChip(label:Text(['Songs','Albums','Playlists','Artists'][i]),selected:tab==i,onSelected:(_){setState(()=>tab=i);if(query.text.isNotEmpty)search(query.text);}))))),
+      TextField(controller:query,textInputAction:TextInputAction.search,onSubmitted:search,decoration:InputDecoration(hintText:'Songs, albums, artists, playlists',suffixIcon:IconButton(onPressed:()=>search(query.text),icon:const Icon(Icons.arrow_forward)),filled:true,border:OutlineInputBorder(borderRadius:BorderRadius.circular(14),borderSide:BorderSide.none))),
+      const SizedBox(height:8),SingleChildScrollView(scrollDirection:Axis.horizontal,child:Row(children:List.generate(4,(i)=>Padding(padding:const EdgeInsets.only(right:8),child:ChoiceChip(label:Text(['Songs','Albums','Playlists','Artists'][i]),selected:tab==i,showCheckmark:false,onSelected:(_){setState(()=>tab=i);if(query.text.isNotEmpty)search(query.text);}))))),
     ]))),
     if(loading)const SliverToBoxAdapter(child:LinearProgressIndicator()),
     if(searching&&tab==0)SliverToBoxAdapter(child:Column(children:[for(var i=0;i<songs.length;i++)_songTile(songs[i],songs)])),
@@ -59,7 +87,7 @@ class _MusicPageState extends State<MusicPage> {
       if(snap.hasError)return Padding(padding:const EdgeInsets.all(20),child:Column(children:[Text('JioSaavn load failed: '+snap.error.toString()),TextButton(onPressed:()=>setState(()=>home=api.home()),child:const Text('Retry'))]));
       return Column(children:[for(final sec in snap.data??[])_section(sec)]);
     })),
-  ]);
+  ]));
   Widget _section(SaavnSection s)=>Padding(padding:const EdgeInsets.only(bottom:20),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Padding(padding:const EdgeInsets.fromLTRB(16,0,16,10),child:Text(s.title,style:Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight:FontWeight.bold))),
     SizedBox(height:188,child:ListView.builder(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:16),itemCount:s.items.length,itemBuilder:(context,i){final m=s.items[i];final image=img(m);return GestureDetector(onTap:()=>open(m),child:SizedBox(width:126,child:Padding(padding:const EdgeInsets.only(right:12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -71,6 +99,7 @@ class _MusicPageState extends State<MusicPage> {
     ListTile(title:Text(s.title),subtitle:Text(s.artist)),
     ListTile(leading:const Icon(Icons.play_arrow),title:const Text('Play next'),onTap:(){final p=JioSaavnPlayer.instance;p.queue.insert((p.index+1).clamp(0,p.queue.length).toInt(),s);Navigator.pop(ctx);}),
     ListTile(leading:const Icon(Icons.queue_music),title:const Text('Add to queue'),onTap:(){JioSaavnPlayer.instance.queue.add(s);Navigator.pop(ctx);}),
+    ListTile(leading:const Icon(Icons.download_outlined),title:const Text('Download'),onTap:(){Navigator.pop(ctx);_downloadSaavn(context,s);}),
     ListTile(leading:const Icon(Icons.album),title:const Text('View album'),onTap:(){Navigator.pop(ctx);showModalBottomSheet<void>(context:context,isScrollControlled:true,builder:(_)=>SaavnTracklistSheet(item:{'albumid':s.albumId,'title':s.album,'image':s.image},playlist:false));}),
   ])))),onTap:()=>play(list,list.indexOf(s)));
 }
@@ -82,7 +111,8 @@ class MusicMiniPlayer extends StatelessWidget {
     const SizedBox(width:10),ClipRRect(borderRadius:BorderRadius.circular(7),child:Image.network(s.image,width:46,height:46,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const Icon(Icons.music_note))),
     const SizedBox(width:10),Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[Text(s.title,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.bold)),Text(s.artist,maxLines:1,overflow:TextOverflow.ellipsis)])),
     StreamBuilder<PlayerState>(stream:p.audio.playerStateStream,builder:(context,snap)=>IconButton(onPressed:()=>snap.data?.playing==true?p.audio.pause():p.audio.play(),icon:Icon(snap.data?.playing==true?Icons.pause:Icons.play_arrow))),
-    IconButton(onPressed:p.next,icon:const Icon(Icons.skip_next)),const SizedBox(width:4),
+    IconButton(onPressed:p.next,icon:const Icon(Icons.skip_next)),
+    IconButton(tooltip:'Close mini player',onPressed:p.stopAndClear,icon:const Icon(Icons.close)),const SizedBox(width:4),
   ]))));});}
 }
 
@@ -96,7 +126,7 @@ class _SaavnFullPlayerState extends State<SaavnFullPlayer>{
   bool shuffle=false, repeat=false;
   String time(Duration d)=>d.inMinutes.toString()+':'+(d.inSeconds%60).toString().padLeft(2,'0');
   @override
-  Widget build(BuildContext context)=>ValueListenableBuilder<int>(valueListenable:p.revision,builder:(context,_,__){final s=p.current;if(s==null)return const Scaffold(body:Center(child:Text('Nothing playing')));return Scaffold(backgroundColor:const Color(0xFF15171E),appBar:AppBar(backgroundColor:const Color(0xFF15171E),foregroundColor:Colors.white,title:const Text('Playing now'),centerTitle:true,actions:[IconButton(onPressed:_queue,icon:const Icon(Icons.queue_music)),IconButton(onPressed:_lyrics,icon:const Icon(Icons.lyrics_outlined)),PopupMenuButton<String>(onSelected:(v){if(v=='quality')_quality();if(v=='lyrics')_lyrics();},itemBuilder:(_)=>const [PopupMenuItem(value:'quality',child:Text('Audio quality')),PopupMenuItem(value:'lyrics',child:Text('Lyrics'))])]),body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,12,24,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+  Widget build(BuildContext context)=>ValueListenableBuilder<int>(valueListenable:p.revision,builder:(context,_,__){final s=p.current;if(s==null)return const Scaffold(body:Center(child:Text('Nothing playing')));return Scaffold(backgroundColor:const Color(0xFF15171E),appBar:AppBar(backgroundColor:const Color(0xFF15171E),foregroundColor:Colors.white,title:const Text('Playing now'),centerTitle:true,actions:[IconButton(tooltip:'Download',onPressed:()=>_downloadSaavn(context,s),icon:const Icon(Icons.download_outlined)),IconButton(onPressed:_queue,icon:const Icon(Icons.queue_music)),IconButton(onPressed:_lyrics,icon:const Icon(Icons.lyrics_outlined)),PopupMenuButton<String>(onSelected:(v){if(v=='quality')_quality();if(v=='lyrics')_lyrics();},itemBuilder:(_)=>const [PopupMenuItem(value:'quality',child:Text('Audio quality')),PopupMenuItem(value:'lyrics',child:Text('Lyrics'))])]),body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,12,24,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Expanded(flex:6,child:Center(child:AspectRatio(aspectRatio:1,child:ClipRRect(borderRadius:BorderRadius.circular(22),child:Image.network(s.image,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const ColoredBox(color:Colors.black26,child:Icon(Icons.music_note,size:90,color:Colors.white))))))),
     const SizedBox(height:24),Row(children:[Expanded(child:Text(s.title,style:const TextStyle(color:Colors.white,fontSize:28,fontWeight:FontWeight.w700),maxLines:2,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Favorite saved in a later music update'))),icon:const Icon(Icons.favorite,color:Color(0xFF7CE8E7),size:30))]),
     Text(s.artist,style:const TextStyle(color:Colors.white60,fontSize:18)),const SizedBox(height:24),
@@ -128,7 +158,7 @@ class _SaavnTracklistSheetState extends State<SaavnTracklistSheet>{
   @override Widget build(BuildContext context)=>SafeArea(child:SizedBox(height:MediaQuery.sizeOf(context).height*.82,child:FutureBuilder<List<SaavnSong>>(future:future,builder:(context,snap){final rows=snap.data??[];return Column(children:[
     Padding(padding:const EdgeInsets.all(16),child:Row(children:[ClipRRect(borderRadius:BorderRadius.circular(10),child:Image.network((widget.item['image']??'').toString().replaceAll('150x150','500x500'),width:82,height:82,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const Icon(Icons.album,size:60))),const SizedBox(width:14),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(saavnClean(widget.item['title']??widget.item['name']??'Music collection'),style:Theme.of(context).textTheme.titleLarge),Text(rows.length.toString()+' songs')]))])),
     Row(children:[const SizedBox(width:16),FilledButton.icon(onPressed:rows.isEmpty?null:()=>_playSaavnAndOpen(context,rows),icon:const Icon(Icons.play_arrow),label:const Text('Play all')),const SizedBox(width:8),OutlinedButton.icon(onPressed:rows.isEmpty?null:(){final shuffled=[...rows]..shuffle();_playSaavnAndOpen(context,shuffled);},icon:const Icon(Icons.shuffle),label:const Text('Shuffle'))]),
-    if(snap.connectionState==ConnectionState.waiting)const Expanded(child:Center(child:CircularProgressIndicator()))else if(snap.hasError)Expanded(child:Center(child:Text('Tracklist failed: '+snap.error.toString())))else Expanded(child:ListView.builder(itemCount:rows.length,itemBuilder:(context,i)=>ListTile(leading:Text((i+1).toString()),title:Text(rows[i].title),subtitle:Text(rows[i].artist),onTap:()=>_playSaavnAndOpen(context,rows,start:i),trailing:const Icon(Icons.more_vert)))),
+    if(snap.connectionState==ConnectionState.waiting)const Expanded(child:Center(child:CircularProgressIndicator()))else if(snap.hasError)Expanded(child:Center(child:Text('Tracklist failed: '+snap.error.toString())))else Expanded(child:ListView.builder(itemCount:rows.length,itemBuilder:(context,i)=>ListTile(leading:Text((i+1).toString()),title:Text(rows[i].title),subtitle:Text(rows[i].artist),onTap:()=>_playSaavnAndOpen(context,rows,start:i),trailing:PopupMenuButton<String>(onSelected:(v){if(v=='download')_downloadSaavn(context,rows[i]);},itemBuilder:(_)=>const [PopupMenuItem(value:'download',child:Text('Download'))])))),
   ]);})));
 }
 class SaavnArtistPage extends StatefulWidget{
