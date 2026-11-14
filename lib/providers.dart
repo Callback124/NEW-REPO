@@ -676,7 +676,7 @@ class StoryTvAdapter extends Adapter {
       }
       final language = value.toString().trim().toLowerCase();
       if (language.isEmpty) continue;
-      if (language == '2' || language == 'hi' || language == 'hin' ||
+      if (language == '2' || language == 'hi' || language == 'hin' || language == 'hi-in' || language == 'hin-in' ||
           language.contains('hindi') || language.contains('हिंदी') ||
           language.contains('हिन्दी')) continue;
       if (RegExp(r'^\d+$').hasMatch(language) ||
