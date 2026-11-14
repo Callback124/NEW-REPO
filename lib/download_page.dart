@@ -505,7 +505,7 @@ class _DownloadPageState extends State<DownloadPage> {
             if (_series && _item.pid == 'storytv' && _downloadMode == 'custom')
               Row(children: [
                 TextButton(onPressed: () => setState(() => _selected.addAll(episodes
-                  .where((e) => _item.pid == 'storytv' || choices.any((x) => x.episode?.id == e.id)).map((e) => e.id)),
+                  .where((e) => _item.pid == 'storytv' || choices.any((x) => x.episode?.id == e.id)).map((e) => e.id))),
                   child: const Text('Select All')),
                 Text('${_selected.length} selected'),
                 const Spacer(),
