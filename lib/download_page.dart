@@ -408,6 +408,15 @@ class _DownloadPageState extends State<DownloadPage> {
               selected: s == _season, onSelected: _loading ? null : (_) => _changeSeason(s),
             ),
           )]),
+        if (_series && _item.pid != 'storytv' && _seasonEpisodes.length > 100)
+          _tabs([for (var start = 0; start < _seasonEpisodes.length; start += 100) Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              showCheckmark: false,
+              label: Text('${(start + 1).toString().padLeft(3, '0')}-${(start + 100 < _seasonEpisodes.length ? start + 100 : _seasonEpisodes.length).toString().padLeft(3, '0')}'),
+              selected: _rangeStart == start, onSelected: _loading ? null : (_) => _changeRange(start),
+            ),
+          )]),
         if (_qualities.isNotEmpty)
           _tabs([for (final q in _qualities) Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -481,13 +490,38 @@ class _DownloadPageState extends State<DownloadPage> {
                 },
               )),
         if (!_loading && _error == null && _series && _item.pid != 'storytv')
-          Expanded(child: ListView(children: [
-            for (final ep in episodes)
-              CheckboxListTile(
-                value: _selected.contains(ep.id), title: Text(ep.label),
-                onChanged: (v) => setState(() { if (v == true) { _selected.add(ep.id); } else { _selected.remove(ep.id); } }),
-              ),
-          ])),
+          Expanded(child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            itemCount: episodes.length,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 100, mainAxisSpacing: 8, crossAxisSpacing: 8,
+              childAspectRatio: .95,
+            ),
+            itemBuilder: (context, i) {
+              final ep = episodes[i];
+              final matching = choices.where((c) => c.episode?.id == ep.id).toList();
+              final match = matching.isEmpty ? null : matching.first;
+              final available = match != null;
+              final selected = _selected.contains(ep.id);
+              return Card(
+                margin: EdgeInsets.zero,
+                clipBehavior: Clip.antiAlias,
+                color: selected ? cs.primaryContainer : null,
+                child: InkWell(
+                  onTap: !available ? null : () => setState(() {
+                    if (selected) { _selected.remove(ep.id); } else { _selected.add(ep.id); }
+                  }),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text('E${ep.episode.toString().padLeft(2, '0')}', style: TextStyle(fontWeight: FontWeight.w800, color: available ? cs.onSurface : cs.onSurface.withOpacity(.35))),
+                    const SizedBox(height: 5),
+                    Text(available ? _sizeLabel(match!.size) : 'Unavailable',
+                      style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+                    if (selected) Icon(Icons.check_circle, size: 15, color: cs.primary),
+                  ]),
+                ),
+              );
+            },
+          )),
       ]),
       bottomNavigationBar: _loading || _error != null ? null : SafeArea(
         child: Padding(
