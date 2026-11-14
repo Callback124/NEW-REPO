@@ -991,7 +991,13 @@ class _PlayerPageState extends State<PlayerPage> {
           else
             const ColoredBox(color: Colors.black),
           const SizedBox.expand(),
-          if (_isLandscape && _indicatorLabel != null)
+          IgnorePointer(
+            ignoring: !showUi,
+            child: AnimatedOpacity(
+              opacity: showUi ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: _controls(context, msgOn, next),
+            ),          if (_isLandscape && _indicatorLabel != null)
             IgnorePointer(
               child: Center(
                 child: Container(
@@ -1042,13 +1048,7 @@ class _PlayerPageState extends State<PlayerPage> {
                 ),
               ),
             ),
-          IgnorePointer(
-            ignoring: !showUi,
-            child: AnimatedOpacity(
-              opacity: showUi ? 1 : 0,
-              duration: const Duration(milliseconds: 200),
-              child: _controls(context, msgOn, next),
-            ),
+
           ),
         ],
       ),
