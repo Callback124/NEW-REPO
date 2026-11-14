@@ -27,6 +27,7 @@ class DownloadRecord {
   final int total;
   final String? localUri;
   final int reason;
+  final String phase;
 
   double get progress => total > 0 ? (downloaded / total).clamp(0, 1).toDouble() : 0;
   String get sizeLabel => total > 0 ? _bytes(total) : 'Size unknown';
@@ -41,6 +42,7 @@ class DownloadRecord {
     total: (m['total'] as num?)?.toInt() ?? -1,
     localUri: m['localUri']?.toString(),
     reason: (m['reason'] as num?)?.toInt() ?? 0,
+    phase: (m['phase'] ?? '').toString(),
   );
 
   Map<String, dynamic> toJson() => {
