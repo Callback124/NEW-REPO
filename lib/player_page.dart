@@ -410,7 +410,7 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   int _sourceResolution(Source s) {
-    final text = 'undefined  '.toLowerCase();
+    final text = '${s.name} ${s.note ?? ''} ${s.url ?? ''}'.toLowerCase();
 
     // Portrait 480x854 is 480p; landscape 854x480 is also 480p.
     final dimensions = RegExp(r'(\d{3,4})\s*[x×]\s*(\d{3,4})').allMatches(text);
