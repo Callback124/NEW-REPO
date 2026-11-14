@@ -110,9 +110,13 @@ class _DownloadPageState extends State<DownloadPage> {
       var next = i + 1;
       while (next < lines.length && (lines[next].trim().isEmpty || lines[next].trim().startsWith('#'))) { next++; }
       if (next >= lines.length) continue;
-      final resolution = RegExp(r'RESOLUTION=\d+x(\d+)', caseSensitive: false).firstMatch(line);
+      final resolution = RegExp(r'RESOLUTION=(\d+)x(\d+)', caseSensitive: false).firstMatch(line);
       final bandwidth = RegExp(r'BANDWIDTH=(\d+)', caseSensitive: false).firstMatch(line);
       var tier = resolution == null ? 0 : int.tryParse(resolution.group(1)!) ?? 0;
+      if (resolution != null) {
+        final height = int.tryParse(resolution.group(2)!) ?? 0;
+        if (height > 0 && height < tier) tier = height;
+      }
       if (tier == 0 && bandwidth != null) {
         final b = int.tryParse(bandwidth.group(1)!) ?? 0;
         tier = b >= 5000000 ? 1080 : b >= 2500000 ? 720 : b >= 1000000 ? 480 : 360;
@@ -277,7 +281,7 @@ class _DownloadPageState extends State<DownloadPage> {
     if (selected.isEmpty) return;
     final sorted = [...selected]..sort((a, b) => a.episode!.season != b.episode!.season ? a.episode!.season.compareTo(b.episode!.season) : a.episode!.episode.compareTo(b.episode!.episode));
     final tempRoot = await getTemporaryDirectory();
-    final work = Directory('${tempRoot.path}/storytv_${DateTime.now().microsecondsSinceEpoch}');
+    final work = Directory('${tempRoot.path}/${_item.pid}_${DateTime.now().microsecondsSinceEpoch}');
     await work.create(recursive: true);
     final outputDir = await getApplicationDocumentsDirectory();
     final fileName = '${_safe(_item.title)}_E${sorted.first.episode!.episode.toString().padLeft(3, '0')}-E${sorted.last.episode!.episode.toString().padLeft(3, '0')}.mp4';
@@ -301,24 +305,26 @@ class _DownloadPageState extends State<DownloadPage> {
             final sources = await getSources(_item, choice.episode);
             final master = sources.firstWhere(
               (x) => x.playable && (Uri.tryParse(x.url ?? '')?.path.toLowerCase().endsWith('.m3u8') ?? false),
-              orElse: () => throw Exception('Episode ${choice.episode!.episode} stream is no longer available.'),
+              orElse: () => sources.firstWhere((x) => x.playable,
+                orElse: () => throw Exception('Episode ${choice.episode!.episode} stream is no longer available.')),
             );
-            final variants = await _storyTvVariants(master);
-            final source = variants.firstWhere((x) => x.name == choice.quality,
-              orElse: () => variants.isNotEmpty ? variants.first : throw Exception('No downloadable quality found.'));
+            final isHls = Uri.tryParse(master.url ?? '')?.path.toLowerCase().endsWith('.m3u8') ?? false;
+            final source = isHls
+              ? (await _storyTvVariants(master)).firstWhere((x) => x.name == choice.quality,
+                  orElse: () => _storyTvVariants(master).then((v) => v.first) as Source)
+              : master;
             final episodeFile = '${work.path}/episode_${i.toString().padLeft(4, '0')}.mp4';
             final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join();
             final samePlaylist = source.url == master.url;
             final ffmpegArgs = <String>[
-              '-y',
-              '-headers', headers, '-i', master.url!,
-              if (!samePlaylist) ...[
+              '-y', '-headers', headers, '-i', master.url!,
+              if (isHls && !samePlaylist) ...[
                 '-headers', headers, '-i', source.url!,
                 '-map', '1:v:0', '-map', '0:a:0?',
-              ] else ...[
+              ] else if (isHls) ...[
                 '-map', '0:v:0', '-map', '0:a:0?',
               ],
-              '-c', 'copy', '-bsf:a', 'aac_adtstoasc', episodeFile,
+              '-c', 'copy', if (isHls) '-bsf:a', if (isHls) 'aac_adtstoasc', episodeFile,
             ];
             final session = await FFmpegKit.executeWithArguments(ffmpegArgs);
             final code = await session.getReturnCode();
@@ -490,7 +496,7 @@ class _DownloadPageState extends State<DownloadPage> {
                 trailing: const Icon(Icons.download_outlined),
               ),
           ])),
-        if (!_loading && _error == null && _series && _item.pid == 'storytv')
+        if (!_loading && _error == null && _series && (_item.pid == 'storytv' || _item.pid == 'freereels'))
           Expanded(child: _downloadMode == 'all'
             ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.video_library_outlined, size: 42),
@@ -529,7 +535,7 @@ class _DownloadPageState extends State<DownloadPage> {
                   );
                 },
               )),
-        if (!_loading && _error == null && _series && _item.pid != 'storytv')
+        if (!_loading && _error == null && _series && _item.pid != 'storytv' && _item.pid != 'freereels')
           Expanded(child: GridView.builder(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             itemCount: episodes.length,
@@ -567,7 +573,7 @@ class _DownloadPageState extends State<DownloadPage> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (_series && _item.pid == 'storytv')
+            if (_series && (_item.pid == 'storytv' || _item.pid == 'freereels'))
               Row(children: [
                 Expanded(child: OutlinedButton(
                   onPressed: _queueing ? null : () => setState(() { _downloadMode = 'all'; _selected.clear(); }),
@@ -581,7 +587,7 @@ class _DownloadPageState extends State<DownloadPage> {
                   child: const Text('Custom Download'),
                 )),
               ]),
-            if (_series && _item.pid == 'storytv' && _downloadMode == 'custom')
+            if (_series && (_item.pid == 'storytv' || _item.pid == 'freereels') && _downloadMode == 'custom')
               Row(children: [
                 TextButton(onPressed: () => setState(() => _selected.addAll(episodes
                   .where((e) => _item.pid == 'storytv' || choices.any((x) => x.episode?.id == e.id)).map((e) => e.id))),
@@ -625,14 +631,14 @@ class _DownloadPageState extends State<DownloadPage> {
               ]),
             Row(children: [
               if (!_series) const Spacer(),
-              if (_series && _item.pid != 'storytv') ...[
+              if (_series && _item.pid != 'storytv' && _item.pid != 'freereels') ...[
                 TextButton(onPressed: () => _selectAll(!allSelected), child: Text(allSelected ? 'Deselect all' : 'Select all')),
                 Text('${_selected.length} selected'), const Spacer(),
               ],
-              if (_series && _item.pid == 'storytv' && _downloadMode == 'custom') const Spacer(),
+              if (_series && (_item.pid == 'storytv' || _item.pid == 'freereels') && _downloadMode == 'custom') const Spacer(),
               FilledButton.icon(
-                onPressed: _queueing || (_series && _item.pid == 'storytv' && _downloadMode == 'custom' && _selected.isEmpty)
-                  || (_series && _item.pid != 'storytv' && _selected.isEmpty) ? null : _startDownloads,
+                onPressed: _queueing || (_series && (_item.pid == 'storytv' || _item.pid == 'freereels') && _downloadMode == 'custom' && _selected.isEmpty)
+                  || (_series && _item.pid != 'storytv' && _item.pid != 'freereels' && _selected.isEmpty) ? null : _startDownloads,
                 icon: _queueing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download, size: 18),
                 label: Text(_queueing ? 'Merging…' : 'Download'),
               ),
