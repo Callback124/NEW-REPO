@@ -271,6 +271,9 @@ class _DownloadPageState extends State<DownloadPage> {
       if (!ReturnCode.isSuccess(mergeCode)) {
         throw Exception('Episodes could not be merged into one MP4. ${await merge.getOutput() ?? ''}');
       }
+      if (DownloadService.instance.downloadLocation == 'both') {
+        await DownloadService.instance.saveMergedToGallery(output, fileName);
+      }
       await DownloadService.instance.addMergedFile(
         title: '${_item.title} · ${sorted.length} episodes',
         fileName: fileName,
