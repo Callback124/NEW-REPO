@@ -23,7 +23,7 @@ class SettingsPage extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w750)),
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
               Text(subtitle, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
             ])),
