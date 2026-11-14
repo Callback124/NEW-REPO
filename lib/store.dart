@@ -31,6 +31,9 @@ class AppState extends ChangeNotifier {
     if (!providers.any((p) => p.id == 'moviebox')) {
       providers.insert(0, ProviderDef.moviebox());
     }
+    if (!providers.any((p) => p.id == 'freereels')) {
+      providers.add(ProviderDef.freeReels());
+    }
     _saveProviders();
     library = _readList('library').map(Item.fromJson).toList();
     progress = {};
