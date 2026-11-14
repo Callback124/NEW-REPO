@@ -474,8 +474,14 @@ class MovieBoxAdapter extends Adapter {
       void addUrl(dynamic value, {String label = 'Auto', bool streamContext = false}) {
         if (value is Map) {
           final map = Map<String, dynamic>.from(value);
-          final meta = (map['resolution'] ?? map['quality'] ?? map['format'] ??
-              map['mimeType'] ?? map['type'] ?? label).toString();
+          final metaValue = map['resolution'] ?? map['resolutions'] ??
+              map['quality'] ?? map['videoQuality'] ?? map['qualityName'] ??
+              map['definition'] ?? map['height'] ?? map['format'] ??
+              map['mimeType'] ?? map['type'] ?? map['label'] ??
+              map['name'] ?? map['title'] ?? label;
+          final meta = metaValue is num && map.containsKey('height')
+              ? '${metaValue.toInt()}p'
+              : metaValue.toString();
           for (final entry in map.entries) {
             final key = entry.key;
             if (['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl'].contains(key)) {
@@ -508,10 +514,14 @@ class MovieBoxAdapter extends Adapter {
           for (final value in node) { scan(value, label, depth + 1, streamContext); }
         } else if (node is Map) {
           final format = (node['format'] ?? node['mimeType'] ?? node['type'] ?? '').toString();
-          final quality = (node['resolution'] ?? node['resolutions'] ??
-              node['quality'] ?? format).toString().isEmpty
+          final qualityValue = node['resolution'] ?? node['resolutions'] ??
+              node['quality'] ?? node['videoQuality'] ?? node['qualityName'] ??
+              node['definition'] ?? node['height'] ?? format;
+          final quality = qualityValue == null || qualityValue.toString().isEmpty
               ? label
-              : (node['resolution'] ?? node['resolutions'] ?? node['quality'] ?? format).toString();
+              : (qualityValue is num && node.containsKey('height')
+                  ? '${qualityValue.toInt()}p'
+                  : qualityValue.toString());
           const urlKeys = ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl'];
           final streamLabel = format.isNotEmpty ? '$quality $format' : quality;
           for (final key in urlKeys) {
@@ -523,7 +533,7 @@ class MovieBoxAdapter extends Adapter {
             final isStreamBranch = streamContext ||
                 ['streams', 'hls', 'dash', 'mp4', 'sources', 'source', 'playlist',
                  'playlistinfo', 'playinfo', 'playsource', 'playsources',
-                 'videos', 'video', 'qualities', 'urlinfo']
+                 'videos', 'video', 'qualities', 'qualitylist', 'resolutions', 'definitions', 'bitrates', 'urlinfo']
                     .contains(key);
             final keyLooksLikeQuality = RegExp(
               r'(4320|2160|1440|1080|900|720|540|480|360)\s*p?',
