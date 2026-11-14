@@ -29,6 +29,7 @@ Future<void> _downloadSaavn(BuildContext context, SaavnSong song) async {
       artist: song.artist,
       image: song.image,
       duration: song.duration,
+      songId: song.id,
     );
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Downloading ${song.title} · $quality kbps')));
   } catch (e) {
