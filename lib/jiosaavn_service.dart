@@ -104,7 +104,7 @@ class JioSaavnPlayer {
   SaavnSong? get current => index >= 0 && index < queue.length ? queue[index] : null;
   Future<void> playList(List<SaavnSong> songs, {int start = 0}) async {
     if (songs.isEmpty) return;
-    queue..clear()..addAll(songs); index = start.clamp(0, queue.length - 1); revision.value++; await playCurrent();
+    queue..clear()..addAll(songs); index = start.clamp(0, queue.length - 1).toInt(); revision.value++; await playCurrent();
   }
   Future<String> _resolve(SaavnSong song, String quality) async {
     var encrypted = song.encryptedUrl;
