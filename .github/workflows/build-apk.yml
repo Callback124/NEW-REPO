@@ -35,12 +35,12 @@ jobs:
           p = Path("android/app/build.gradle.kts")
           if p.exists():
               s = p.read_text()
-              s = re.sub(r'minSdk = flutter\\.minSdkVersion', 'minSdk = 24', s)
+              s = re.sub(r'minSdk = flutter\.minSdkVersion', 'minSdk = 24', s)
               p.write_text(s)
           else:
               p = Path("android/app/build.gradle")
               s = p.read_text()
-              s = re.sub(r'minSdkVersion flutter\\.minSdkVersion', 'minSdkVersion 24', s)
+              s = re.sub(r'minSdkVersion flutter\.minSdkVersion', 'minSdkVersion 24', s)
               p.write_text(s)
           PY
 
