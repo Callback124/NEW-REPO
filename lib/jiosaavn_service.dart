@@ -56,11 +56,13 @@ class JioSaavnApi {
     return rows is List ? rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : [];
   }
   Future<List<SaavnSection>> home() async {
-    final launchFuture = call('webapi.getLaunchData');
-    final artistsFuture = call('social.getTopArtists', {'p': '1', 'n': '50'});
-    final popAlbumsFuture = call('search.getAlbumResults', {'q': 'Pop Hindi', 'p': '1', 'n': '15'});
-    final popHindiFuture = call('playlist.getDetails', {'listid': '1302009985', 'cc': 'in'});
-    final values = await Future.wait([launchFuture, artistsFuture, popAlbumsFuture, popHindiFuture]);
+    Future<dynamic> safe(Future<dynamic> Function() request) async { try { return await request(); } catch (_) { return null; } }
+    final values = await Future.wait([
+      safe(() => call('webapi.getLaunchData')),
+      safe(() => call('social.getTopArtists', {'p': '1', 'n': '50'})),
+      safe(() => call('search.getAlbumResults', {'q': 'Pop Hindi', 'p': '1', 'n': '15'})),
+      safe(() => call('playlist.getDetails', {'listid': '1302009985', 'cc': 'in'})),
+    ]);
     final root = values[0] is Map ? Map<String, dynamic>.from(values[0] as Map) : <String, dynamic>{};
     final sections = <SaavnSection>[];
     List<Map<String, dynamic>> rows(dynamic raw) {
@@ -141,10 +143,8 @@ class JioSaavnPlayer {
     var encrypted = song.encryptedUrl;
     if (encrypted.isEmpty) { final d = await api.songDetails(song.id); final more = d['more_info']; encrypted = (d['encrypted_media_url'] ?? (more is Map ? more['encrypted_media_url'] : null) ?? '').toString(); }
     if (encrypted.isEmpty) throw Exception('Audio URL not available');
-    final decrypted = DES(key: '38346591'.codeUnits, mode: DESMode.ECB).decrypt(base64.decode(encrypted.trim()));
-    final padding = decrypted.isEmpty ? 0 : decrypted.last;
-    final plainBytes = padding > 0 && padding <= 8 && padding <= decrypted.length ? decrypted.sublist(0, decrypted.length - padding) : decrypted;
-    var url = utf8.decode(plainBytes).trim();
+    final decrypted = DES(key: '38346591'.codeUnits, mode: DESMode.ECB, paddingType: DESPaddingType.PKCS5).decrypt(base64.decode(encrypted.trim()));
+    var url = utf8.decode(decrypted).trim();
     url = url.replaceAll(RegExp(r'_\d+\.(mp4|m4a)'), '_$quality.mp4').replaceFirst('http://', 'https://');
     return url;
   }
