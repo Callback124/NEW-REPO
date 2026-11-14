@@ -31,6 +31,9 @@ class _PlayerPageState extends State<PlayerPage> {
   late Episode? _ep = widget.ep;
   late List<Episode> _episodes = widget.list;
   List<Source> _srcs = const [];
+  List<VideoTrack> _storyTvTracks = const [];
+  bool _storyTvAutoQuality = true;
+  String? _storyTvSelectedTrackId;
   final Set<String> _failedSourceUrls = <String>{};
   Source? _cur;
   String? _msg = 'Finding sources…';
@@ -97,6 +100,9 @@ class _PlayerPageState extends State<PlayerPage> {
       _showPickInMsg = false;
       _ended = false;
       _srcs = const [];
+      _storyTvTracks = const [];
+      _storyTvAutoQuality = true;
+      _storyTvSelectedTrackId = null;
       _cur = null;
     });
     try {
@@ -224,6 +230,32 @@ class _PlayerPageState extends State<PlayerPage> {
     try {
       await controller.initialize();
       if (!mounted || _player != controller) return false;
+
+      // Story TV exposes one master HLS URL. Read ExoPlayer's adaptive video
+      // tracks from that same controller; never load variant playlist URLs.
+      if (_item.pid == 'storytv' && controller.isVideoTrackSupportAvailable()) {
+        try {
+          final tracks = await controller.getVideoTracks();
+          if (!mounted || _player != controller) return false;
+          final byTier = <int, VideoTrack>{};
+          for (final track in tracks) {
+            final tier = _storyTvTrackTier(track);
+            if (tier >= 240 && tier <= 1080) {
+              byTier.putIfAbsent(tier, () => track);
+            }
+          }
+          final sortedTracks = byTier.entries.toList()
+            ..sort((a, b) => b.key.compareTo(a.key));
+          setState(() {
+            _storyTvTracks = sortedTracks.map((entry) => entry.value).toList();
+            _storyTvAutoQuality = true;
+            _storyTvSelectedTrackId = null;
+          });
+        } catch (_) {
+          // Keep Auto playback available if this platform cannot report tracks.
+          _storyTvTracks = const [];
+        }
+      }
       final videoSize = controller.value.size;
       final isLandscape = videoSize.width >= videoSize.height;
       await SystemChrome.setPreferredOrientations(isLandscape
@@ -299,28 +331,115 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
+  int _storyTvTrackTier(VideoTrack track) {
+    final width = track.width ?? 0;
+    final height = track.height ?? 0;
+    if (width > 0 && height > 0) {
+      return width < height ? width : height;
+    }
+    final label = track.label ?? '';
+    final match = RegExp(r'(\\d{3,4})\\s*p?', caseSensitive: false).firstMatch(label);
+    return int.tryParse(match?.group(1) ?? '') ?? 0;
+  }
+
+  String _storyTvTrackTitle(VideoTrack track) {
+    final tier = _storyTvTrackTier(track);
+    return tier > 0 ? '${tier}p' : (track.label ?? 'Video quality');
+  }
+
+  String _storyTvTrackSubtitle(VideoTrack track) {
+    final width = track.width ?? 0;
+    final height = track.height ?? 0;
+    final parts = <String>[];
+    if (width > 0 && height > 0) parts.add('${width} × ${height}');
+    final bitrate = track.bitrate ?? 0;
+    if (bitrate > 0) {
+      parts.add(bitrate >= 1000000
+          ? '${(bitrate / 1000000).toStringAsFixed(1)} Mbps'
+          : '${(bitrate / 1000).round()} kbps');
+    }
+    return parts.join(' · ');
+  }
+
+  Future<void> _selectStoryTvQuality(VideoTrack? track) async {
+    final controller = _player;
+    if (controller == null || !controller.value.isInitialized) return;
+    try {
+      // null clears the ExoPlayer video override and restores adaptive quality.
+      await controller.selectVideoTrack(track);
+      if (!mounted || _player != controller) return;
+      setState(() {
+        _storyTvAutoQuality = track == null;
+        _storyTvSelectedTrackId = track?.id;
+      });
+      final refreshed = await controller.getVideoTracks();
+      if (!mounted || _player != controller) return;
+      setState(() {
+        _storyTvTracks = refreshed
+          ..sort((a, b) => _storyTvTrackTier(b).compareTo(_storyTvTrackTier(a)));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not change video quality: $e')),
+      );
+    }
+  }
+
   void _pickSource() {
     if (_srcs.isEmpty || !mounted) return;
+    final useStoryTvTracks = _item.pid == 'storytv' && _storyTvTracks.isNotEmpty;
     _sheet('Sources', [
-      for (final s in _srcs)
+      if (useStoryTvTracks) ...[
         ListTile(
-          title: Text(s.name),
-          subtitle: _sourceResolution(s) > 1080
-              ? const Text('Above 1080p · Not supported on this device')
-              : (s.note != null ? Text(s.note!) : null),
-          enabled: (s.playable && (_sourceResolution(s) == 0 || _sourceResolution(s) <= 1080)) || s.link != null,
-          trailing: _cur == s
-              ? const Icon(Icons.check)
-              : (s.link != null ? const Icon(Icons.open_in_new, size: 18) : null),
+          title: const Text('Auto · adaptive quality'),
+          subtitle: const Text('Let ExoPlayer choose the best quality'),
+          trailing: _storyTvAutoQuality ? const Icon(Icons.check) : null,
           onTap: () {
             Navigator.pop(context);
-            if (s.playable) {
-              _load(s);
-            } else if (s.link != null) {
-              launchUrl(Uri.parse(s.link!), mode: LaunchMode.externalApplication);
-            }
+            _selectStoryTvQuality(null);
           },
         ),
+        for (final track in _storyTvTracks)
+          ListTile(
+            title: Text(_storyTvTrackTitle(track)),
+            subtitle: _storyTvTrackSubtitle(track).isEmpty
+                ? null
+                : Text(_storyTvTrackSubtitle(track)),
+            trailing: _storyTvSelectedTrackId == track.id
+                ? const Icon(Icons.check)
+                : null,
+            onTap: () {
+              Navigator.pop(context);
+              _selectStoryTvQuality(track);
+            },
+          ),
+      ] else ...[
+        if (_item.pid == 'storytv')
+          const ListTile(
+            title: Text('Auto · adaptive quality'),
+            subtitle: Text('Video quality tracks are not available on this player platform'),
+          ),
+        for (final s in _srcs)
+          ListTile(
+            title: Text(s.name),
+            subtitle: _sourceResolution(s) > 1080
+                ? const Text('Above 1080p · Not supported on this device')
+                : (s.note != null ? Text(s.note!) : null),
+            enabled: (s.playable && (_sourceResolution(s) == 0 || _sourceResolution(s) <= 1080)) || s.link != null,
+            trailing: _cur == s
+                ? const Icon(Icons.check)
+                : (s.link != null ? const Icon(Icons.open_in_new, size: 18) : null),
+            onTap: () {
+              Navigator.pop(context);
+              if (s.playable) {
+                _load(s);
+              } else if (s.link != null) {
+                launchUrl(Uri.parse(s.link!), mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
+      ],
     ]);
   }
 
