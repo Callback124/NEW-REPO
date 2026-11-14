@@ -38,6 +38,40 @@ jobs:
           p.write_text(s)
           PY
 
+          # Register the Android media playback service and media-button receiver
+          # required by just_audio_background / audio_service.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          permissions = '''
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+          '''
+          if "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" not in s:
+              s = s.replace("<application", permissions + "\\n    <application", 1)
+          components = '''
+                  <service
+                      android:name="com.ryanheise.audioservice.AudioService"
+                      android:foregroundServiceType="mediaPlayback"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.media.browse.MediaBrowserService" />
+                      </intent-filter>
+                  </service>
+                  <receiver
+                      android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MEDIA_BUTTON" />
+                      </intent-filter>
+                  </receiver>
+          '''
+          if "com.ryanheise.audioservice.AudioService" not in s:
+              s = s.replace("</application>", components + "\\n    </application>", 1)
+          p.write_text(s)
+          PY
+
           # FFmpegKit HTTPS requires Android API 24 or newer.
           python3 - <<'PY'
           from pathlib import Path
