@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -94,8 +95,8 @@ class DownloadService extends ChangeNotifier {
       return;
     }
     try {
-      final ids = saved.map((e) => (e['id'] as num).toInt()).toList();
-      final live = await _channel.invokeListMethod<dynamic>('queryAll', {'ids': ids}) ?? [];
+      final ids = saved.map((e) => (e['id'] as num).toInt()).where((id) => id > 0).toList();
+      final live = ids.isEmpty ? <dynamic>[] : await _channel.invokeListMethod<dynamic>('queryAll', {'ids': ids}) ?? [];
       final byId = {for (final v in live.whereType<Map>()) (v['id'] as num).toInt(): v};
       records = saved.map((m) {
         final id = (m['id'] as num).toInt();
@@ -135,8 +136,35 @@ class DownloadService extends ChangeNotifier {
     await refresh();
   }
 
+
+  Future<void> addMergedFile({
+    required String title,
+    required String fileName,
+    required String localPath,
+  }) async {
+    final file = File(localPath);
+    if (!await file.exists() || await file.length() == 0) {
+      throw Exception('Merged video file was not created.');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    final list = <Map<String, dynamic>>[];
+    if (raw != null) {
+      try { list.addAll((jsonDecode(raw) as List).map((e) => Map<String, dynamic>.from(e as Map))); } catch (_) {}
+    }
+    final id = -DateTime.now().microsecondsSinceEpoch;
+    final size = await file.length();
+    list.add({
+      'id': id, 'title': title, 'fileName': fileName, 'url': '',
+      'status': 'complete', 'downloaded': size, 'total': size,
+      'localUri': file.uri.toString(), 'reason': 0,
+    });
+    await prefs.setString(_key, jsonEncode(list));
+    await refresh();
+  }
+
   Future<void> cancel(int id) async {
-    await _channel.invokeMethod<bool>('cancel', {'id': id});
+    if (id > 0) await _channel.invokeMethod<bool>('cancel', {'id': id});
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     if (raw != null) {
@@ -151,11 +179,11 @@ class DownloadService extends ChangeNotifier {
   }
 
   Future<void> open(int id) async {
-    await _channel.invokeMethod<bool>('open', {'id': id});
+    if (id > 0) await _channel.invokeMethod<bool>('open', {'id': id});
   }
 
   Future<void> forget(int id) async {
-    await _channel.invokeMethod<bool>('remove', {'id': id});
+    if (id > 0) await _channel.invokeMethod<bool>('remove', {'id': id});
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     final list = raw == null ? <Map<String, dynamic>>[] :
