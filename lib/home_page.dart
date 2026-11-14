@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'models.dart';
 import 'player_page.dart';
@@ -259,13 +260,59 @@ class _StoryTvGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: items.length,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 170, childAspectRatio: .52,
+        maxCrossAxisExtent: 205, childAspectRatio: .43,
         mainAxisSpacing: 14, crossAxisSpacing: 12,
       ),
-      itemBuilder: (context, i) => PosterCard(
-        item: items[i], onTap: () => openDetail(context, items[i]),
-        subtitle: items[i].corner,
-      ),
+      itemBuilder: (context, i) {
+        final item = items[i];
+        return InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => openDetail(context, item),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+                      if (isHttp(item.poster))
+                        CachedNetworkImage(
+                          imageUrl: item.poster!,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 360,
+                          memCacheHeight: 640,
+                          maxWidthDiskCache: 540,
+                          maxHeightDiskCache: 960,
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
+                          placeholder: (_, __) => const Center(child: CircularProgressIndicator(strokeWidth: 1.5)),
+                          errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      Positioned(
+                        left: 7, bottom: 7,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                            child: Text(item.corner ?? 'Mini Drama',
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        );
+      },
     ),
   );
 }
