@@ -4,6 +4,7 @@ import 'package:dart_des/dart_des.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 class SaavnSong {
   const SaavnSong({required this.id, required this.title, required this.artist, required this.album, required this.image, required this.duration, required this.encryptedUrl, this.lyricsId = '', this.albumId = ''});
@@ -146,10 +147,22 @@ class JioSaavnPlayer {
     url = url.replaceAllMapped(RegExp(r'_\d+\.(mp4|m4a)', caseSensitive: false), (m) => '_$quality.${m[1]}').replaceFirst('http://', 'https://');
     return url;
   }
+  static bool _backgroundAudioReady = false;
+  Future<void> _ensureBackgroundAudio() async {
+    if (_backgroundAudioReady) return;
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'app.moviefox.music.playback',
+      androidNotificationChannelName: 'MovieFox Music',
+      androidNotificationOngoing: true,
+    );
+    _backgroundAudioReady = true;
+  }
   Future<void> _setSongSource(SaavnSong song, String url) async {
+    await _ensureBackgroundAudio();
     await audio.setAudioSource(AudioSource.uri(Uri.parse(url), headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'}, tag: MediaItem(id: song.id, album: song.album, title: song.title, artist: song.artist, artUri: Uri.tryParse(song.image))));
   }
   Future<void> playOffline(SaavnSong song, String localUri) async {
+    await _ensureBackgroundAudio();
     queue..clear()..add(song); index = 0; revision.value++;
     await audio.setAudioSource(AudioSource.uri(Uri.parse(localUri), tag: MediaItem(id: song.id, album: song.album, title: song.title, artist: song.artist, artUri: Uri.tryParse(song.image))));
     await audio.play();
