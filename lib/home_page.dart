@@ -131,7 +131,9 @@ class _ProviderSectionState extends State<_ProviderSection> {
                 child: Text('${p.name} has no home catalogs. Try Search.'),
               );
             }
-            return p.kind == 'storytv'\n                ? _StoryTvGrid(items: shelves.expand((s) => s.items).toList())\n                : Column(children: [for (final s in shelves) ShelfRow(shelf: s)]);
+            return p.kind == 'storytv'
+                ? _StoryTvGrid(items: shelves.expand((s) => s.items).toList())
+                : Column(children: [for (final s in shelves) ShelfRow(shelf: s)]);
           },
         ),
       ],
