@@ -557,20 +557,8 @@ class _PlayerPageState extends State<PlayerPage> {
     if (!_isLandscape || _locked) return;
     _gestureStart = details.localPosition;
     _gestureStartPosition = _player?.value.position ?? Duration.zero;
-    final width = MediaQuery.sizeOf(context).width;
-    final controller = _player;
-    if (details.localPosition.dx < width / 2) {
-      _gestureMode = 'brightness';
-      _gestureStartValue = 0.5;
-      _playerChannel.invokeMethod<double>('getBrightness').then((v) {
-        if (mounted && _gestureMode == 'brightness' && v != null) {
-          _gestureStartValue = v;
-        }
-      }).catchError((_) {});
-    } else {
-      _gestureMode = 'volume';
-      _gestureStartValue = controller?.value.volume ?? 1.0;
-    }
+    _gestureMode = 'pending';
+    _gestureStartValue = 0.5;
     _seekDeltaSeconds = 0;
     _seekPreview = null;
   }
@@ -580,6 +568,26 @@ class _PlayerPageState extends State<PlayerPage> {
     final start = _gestureStart!;
     final dx = details.localPosition.dx - start.dx;
     final dy = details.localPosition.dy - start.dy;
+    if (_gestureMode == 'pending') {
+      if (dx.abs() < 10 && dy.abs() < 10) return;
+      if (dx.abs() > dy.abs()) {
+        _gestureMode = 'seek';
+        _gestureStartPosition = _player?.value.position ?? Duration.zero;
+      } else {
+        final width = MediaQuery.sizeOf(context).width;
+        if (start.dx < width / 2) {
+          _gestureMode = 'brightness';
+          _playerChannel.invokeMethod<double>('getBrightness').then((v) {
+            if (mounted && _gestureMode == 'brightness' && v != null) {
+              _gestureStartValue = v;
+            }
+          }).catchError((_) {});
+        } else {
+          _gestureMode = 'volume';
+          _gestureStartValue = _player?.value.volume ?? 1.0;
+        }
+      }
+    }
     if (_gestureMode == 'brightness' || _gestureMode == 'volume') {
       final value = (_gestureStartValue - dy / 260).clamp(0.0, 1.0);
       if (_gestureMode == 'brightness') {
@@ -948,7 +956,17 @@ class _PlayerPageState extends State<PlayerPage> {
     final showUi = _visible || msgOn;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _locked ? null : _toggleUi,
+        onDoubleTapDown: _isLandscape ? _onGestureDoubleTapDown : null,
+        onDoubleTap: _isLandscape ? _onGestureDoubleTap : null,
+        onPanStart: _isLandscape ? _onGesturePanStart : null,
+        onPanUpdate: _isLandscape ? _onGesturePanUpdate : null,
+        onPanEnd: _isLandscape ? _onGesturePanEnd : null,
+        onLongPressStart: _isLandscape ? _onGestureLongPressStart : null,
+        onLongPressEnd: _isLandscape ? _onGestureLongPressEnd : null,
+        child: Stack(
         fit: StackFit.expand,
         children: [
           if (_player != null && _player!.value.isInitialized)
@@ -972,23 +990,7 @@ class _PlayerPageState extends State<PlayerPage> {
             )
           else
             const ColoredBox(color: Colors.black),
-          if (_isLandscape && !_locked)
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _toggleUi,
-              onDoubleTapDown: _onGestureDoubleTapDown,
-              onDoubleTap: _onGestureDoubleTap,
-              onPanStart: _onGesturePanStart,
-              onPanUpdate: _onGesturePanUpdate,
-              onPanEnd: _onGesturePanEnd,
-              onLongPressStart: _onGestureLongPressStart,
-              onLongPressEnd: _onGestureLongPressEnd,
-            )
-          else
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _locked ? null : _toggleUi,
-            ),
+          const SizedBox.expand(),
           if (_isLandscape && _indicatorLabel != null)
             IgnorePointer(
               child: Center(
@@ -1049,6 +1051,7 @@ class _PlayerPageState extends State<PlayerPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
