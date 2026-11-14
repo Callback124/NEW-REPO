@@ -240,6 +240,9 @@ class ProviderDef {
   factory ProviderDef.moviebox() => const ProviderDef(
       id: 'moviebox', kind: 'moviebox', name: 'MovieBox', builtin: true);
 
+  factory ProviderDef.freeReels() => const ProviderDef(
+      id: 'freereels', kind: 'freereels', name: 'Free Reels', builtin: true);
+
   ProviderDef copyWith({bool? enabled}) => ProviderDef(
         id: id,
         kind: kind,
