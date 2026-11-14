@@ -739,14 +739,14 @@ class StoryTvAdapter extends Adapter {
       return [Source.clean(name: 'Auto', url: finalUrl, headers: _playerHeaders)];
     }
 
-    final lines = body.split(RegExp(r'\\r?\\n'));
+    final lines = body.split(RegExp(r'\r?\n'));
     final variants = <({int height, int bandwidth, String codecs, String uri})>[];
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
       if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
-      final resolution = RegExp(r'RESOLUTION=\\d+x(\\d+)', caseSensitive: false).firstMatch(line);
+      final resolution = RegExp(r'RESOLUTION=\d+x(\d+)', caseSensitive: false).firstMatch(line);
       final height = int.tryParse(resolution?.group(1) ?? '') ?? 0;
-      final bandwidthMatch = RegExp(r'(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\\d+)', caseSensitive: false).firstMatch(line);
+      final bandwidthMatch = RegExp(r'(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\d+)', caseSensitive: false).firstMatch(line);
       final bandwidth = int.tryParse(bandwidthMatch?.group(1) ?? '') ?? 0;
       final codecMatch = RegExp(r'CODECS="([^"]+)"', caseSensitive: false).firstMatch(line);
       final codecs = codecMatch?.group(1)?.toLowerCase() ?? '';
