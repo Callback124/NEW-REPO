@@ -309,10 +309,9 @@ class _DownloadPageState extends State<DownloadPage> {
                 orElse: () => throw Exception('Episode ${choice.episode!.episode} stream is no longer available.')),
             );
             final isHls = Uri.tryParse(master.url ?? '')?.path.toLowerCase().endsWith('.m3u8') ?? false;
-            final source = isHls
-              ? (await _storyTvVariants(master)).firstWhere((x) => x.name == choice.quality,
-                  orElse: () => _storyTvVariants(master).then((v) => v.first) as Source)
-              : master;
+            final variants = isHls ? await _storyTvVariants(master) : <Source>[master];
+            final source = variants.firstWhere((x) => x.name == choice.quality,
+              orElse: () => variants.first);
             final episodeFile = '${work.path}/episode_${i.toString().padLeft(4, '0')}.mp4';
             final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join();
             final samePlaylist = source.url == master.url;
