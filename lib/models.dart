@@ -234,7 +234,10 @@ class ProviderDef {
   final Map<String, dynamic>? data;
   final Map<String, dynamic>? manifest;
 
-  factory ProviderDef.storyTv() => const ProviderDef(\n      id: 'storytv', kind: 'storytv', name: 'Story TV', builtin: true);\n\n  factory ProviderDef.moviebox() => const ProviderDef(
+  factory ProviderDef.storyTv() => const ProviderDef(
+      id: 'storytv', kind: 'storytv', name: 'Story TV', builtin: true);
+
+  factory ProviderDef.moviebox() => const ProviderDef(
       id: 'moviebox', kind: 'moviebox', name: 'MovieBox', builtin: true);
 
   ProviderDef copyWith({bool? enabled}) => ProviderDef(
