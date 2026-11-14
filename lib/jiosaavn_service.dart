@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dart_des/dart_des.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'package:audio_service/audio_service.dart';
 
 class SaavnSong {
   const SaavnSong({required this.id, required this.title, required this.artist, required this.album, required this.image, required this.duration, required this.encryptedUrl, this.lyricsId = '', this.albumId = ''});
@@ -148,6 +149,14 @@ class JioSaavnPlayer {
     url = url.replaceAllMapped(RegExp(r'_\d+\.(mp4|m4a)', caseSensitive: false), (m) => '_$quality.${m[1]}').replaceFirst('http://', 'https://');
     return url;
   }
+  Future<void> _setSongSource(SaavnSong song, String url) async {
+    await audio.setAudioSource(AudioSource.uri(Uri.parse(url), headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'}, tag: MediaItem(id: song.id, album: song.album, title: song.title, artist: song.artist, artUri: Uri.tryParse(song.image))));
+  }
+  Future<void> playOffline(SaavnSong song, String localUri) async {
+    queue..clear()..add(song); index = 0; revision.value++;
+    await audio.setAudioSource(AudioSource.uri(Uri.parse(localUri), tag: MediaItem(id: song.id, album: song.album, title: song.title, artist: song.artist, artUri: Uri.tryParse(song.image))));
+    await audio.play();
+  }
   Future<void> playCurrent() async {
     final song = current; if (song == null) return;
     Object? lastError;
@@ -156,7 +165,7 @@ class JioSaavnPlayer {
     for (final quality in qualities) {
       try {
         final url = await resolveAudioUrl(song, quality);
-        await audio.setUrl(url, headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'});
+        await _setSongSource(song, url);
         bitrate = quality;
         await audio.play();
         return;
@@ -170,6 +179,6 @@ class JioSaavnPlayer {
   Future<void> next() async { if (queue.isEmpty) return; index = (index + 1) % queue.length; revision.value++; await playCurrent(); }
   Future<void> previous() async { if (queue.isEmpty) return; if (audio.position > const Duration(seconds: 3)) { await audio.seek(Duration.zero); return; } index = (index - 1 + queue.length) % queue.length; revision.value++; await playCurrent(); }
   Future<void> setQuality(String value) async {
-    bitrate = value; if (current != null) { final wasPlaying = audio.playing; final pos = audio.position; await audio.pause(); final url = await resolveAudioUrl(current!, value); await audio.setUrl(url); await audio.seek(pos); if (wasPlaying) await audio.play(); }
+    bitrate = value; if (current != null) { final wasPlaying = audio.playing; final pos = audio.position; await audio.pause(); final url = await resolveAudioUrl(current!, value); await _setSongSource(current!, url); await audio.seek(pos); if (wasPlaying) await audio.play(); }
   }
 }
