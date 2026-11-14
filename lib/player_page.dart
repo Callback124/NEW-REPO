@@ -465,6 +465,7 @@ class _PlayerPageState extends State<PlayerPage> {
   Future<void> _pickEpisodes() {
     _hideTimer?.cancel();
     final seasons = (_episodes.map((e) => e.season).toSet().toList()..sort());
+    final isStoryTv = _item.pid == 'storytv';
     var selectedSeason = _ep?.season ?? seasons.first;
     var rangeStart = 0;
     return showModalBottomSheet<void>(
@@ -492,7 +493,7 @@ class _PlayerPageState extends State<PlayerPage> {
                   child: Text('Episodes',
                     style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                 ),
-                if (seasons.length > 1)
+                if (!isStoryTv && seasons.length > 1)
                   SizedBox(
                     height: 48,
                     child: ListView(
@@ -563,10 +564,6 @@ class _PlayerPageState extends State<PlayerPage> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text('S${episode.season.toString().padLeft(2, '0')}',
-                                  style: TextStyle(color: Theme.of(ctx).colorScheme.primary,
-                                    fontSize: 13, fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 3),
                                 Text('E${number.toString().padLeft(2, '0')}',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                                     color: selected ? Theme.of(ctx).colorScheme.primary : Theme.of(ctx).colorScheme.onSurface)),
