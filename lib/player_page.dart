@@ -228,7 +228,7 @@ class _PlayerPageState extends State<PlayerPage> {
       return true;
     } catch (e) {
       _transitioning = false;
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _msg = 'Player error: $e';
         _showPickInMsg = true;
