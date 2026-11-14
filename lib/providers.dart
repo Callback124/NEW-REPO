@@ -257,15 +257,12 @@ class MovieBoxAdapter extends Adapter {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ProviderError('MovieBox HTTP ' + response.statusCode.toString() +
-          '
-' + method + ' ' + uri.toString() + '
-' +
+          '\n' + method + ' ' + uri.toString() + '\n' +
           (responseText.isEmpty ? 'Empty response body' : responseText));
     }
     dynamic decoded;
     try { decoded = jsonDecode(responseText); }
-    catch (_) { throw ProviderError('MovieBox invalid JSON for ' + uri.toString() + '
-' + responseText); }
+    catch (_) { throw ProviderError('MovieBox invalid JSON for ' + uri.toString() + '\n' + responseText); }
     if (decoded is Map && decoded['code'] != null &&
         decoded['code'].toString() != '0' &&
         !decoded['message'].toString().toLowerCase().contains('success')) {
@@ -274,8 +271,7 @@ class MovieBoxAdapter extends Adapter {
         await _getToken(force: true);
         return _request(path, method: method, query: query, body: body, retry: false, referer: referer);
       }
-      throw ProviderError('MovieBox API error (' + decoded['code'].toString() + '): ' + reason + '
-' + responseText);
+      throw ProviderError('MovieBox API error (' + decoded['code'].toString() + '): ' + reason + '\n' + responseText);
     }
     return response;
   }
@@ -832,8 +828,7 @@ class StremioAdapter extends Adapter {
   Source _stream(Map s) {
     final name = [
       s['name'],
-      (s['title'] ?? s['description'] ?? '').toString().split('
-').first,
+      (s['title'] ?? s['description'] ?? '').toString().split('\n').first,
     ].where((e) => e != null && e.toString().isNotEmpty).join(' · ');
     final n = name.isEmpty ? 'Stream' : name.replaceAll(RegExp(r'\s+'), ' ');
     if (s['url'] != null) return Source.clean(name: n, url: s['url'].toString());
