@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'downloads_service.dart';
 import 'models.dart';
 import 'player_page.dart';
+import 'music_page.dart';
+import 'jiosaavn_service.dart';
 
 class DownloadsPage extends StatefulWidget {
   const DownloadsPage({super.key});
@@ -31,6 +33,17 @@ class _DownloadsPageState extends State<DownloadsPage> {
 
   Future<void> _playOffline(DownloadRecord record) async {
     final raw = record.localUri;
+    if (record.isMusic && raw != null && raw.isNotEmpty) {
+      final song = SaavnSong(id: record.songId.isEmpty ? record.id.toString() : record.songId, title: record.title, artist: record.artist, album: '', image: record.image, duration: record.duration, encryptedUrl: '');
+      try {
+        await JioSaavnPlayer.instance.playOffline(song, raw);
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SaavnFullPlayer()));
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Offline music could not be played: $e')));
+      }
+      return;
+    }
     if (raw == null || raw.isEmpty) {
       await DownloadService.instance.open(record.id);
       return;
@@ -72,7 +85,7 @@ class _DownloadsPageState extends State<DownloadsPage> {
                 SizedBox(height: 12),
                 Text('No downloads yet'),
                 SizedBox(height: 4),
-                Text('Movies and episodes you download will appear here.'),
+                Text('Your downloaded movies, episodes and music will appear here.'),
               ])),
             )
           else
