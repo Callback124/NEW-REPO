@@ -6,6 +6,7 @@ import 'downloads_service.dart';
 import 'home_page.dart';
 import 'library_page.dart';
 import 'music_page.dart';
+import 'music_page.dart';
 import 'search_page.dart';
 import 'settings_page.dart';
 import 'store.dart';
@@ -75,6 +76,7 @@ class _ShellState extends State<Shell> {
     (icon: Icons.home_outlined, selected: Icons.home, label: 'Home'),
     (icon: Icons.search, selected: Icons.search, label: 'Search'),
     (icon: Icons.music_note_outlined, selected: Icons.music_note, label: 'Music'),
+    (icon: Icons.music_note_outlined, selected: Icons.music_note, label: 'Music'),
     (icon: Icons.download_outlined, selected: Icons.download, label: 'Downloads'),
     (icon: Icons.bookmark_border, selected: Icons.bookmark, label: 'Library'),
     (icon: Icons.tune, selected: Icons.tune, label: 'Settings'),
@@ -89,7 +91,7 @@ class _ShellState extends State<Shell> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
-    final body = IndexedStack(index: _i, children: _pages);
+    final body = Column(children: [Expanded(child: IndexedStack(index: _i, children: _pages)), const MusicMiniPlayer()]);
     if (wide) {
       return Scaffold(
         body: Row(
