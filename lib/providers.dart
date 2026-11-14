@@ -596,6 +596,11 @@ class StoryTvAdapter extends Adapter {
   };
   static final http.Client _client = http.Client();
   static final Map<String, Future<dynamic>> _cache = {};
+  static Future<void>? _hindiFlight;
+  Future<void> _ensureHindi() => _hindiFlight ??= _client.post(
+    Uri.parse('$_base/userservice/v1/language/select?langId=2'),
+    headers: _apiHeaders, body: jsonEncode({'langId': 2}),
+  ).timeout(const Duration(seconds: 12)).then((_) {}).catchError((_) {}).whenComplete(() => _hindiFlight = null);
   Future<dynamic> _request(String path, {bool cache = false}) {
     final url = '$_base$path';
     if (cache && _cache.containsKey(url)) return _cache[url]!;
