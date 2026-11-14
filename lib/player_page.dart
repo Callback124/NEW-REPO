@@ -115,9 +115,19 @@ class _PlayerPageState extends State<PlayerPage> {
           _showPickInMsg = true;
         });
       } else {
-        // Auto quality always starts with the highest playable resolution.
-        // Users can still manually override it from the quality/source menu.
-        await _load(ok.first);
+        // Try the highest supported variant first, then fall back to lower qualities
+        // if this device's decoder cannot initialize the selected stream.
+        for (final source in ok) {
+          final loaded = await _load(source);
+          if (loaded) return;
+          if (!mounted || gen != _gen) return;
+        }
+        _transitioning = false;
+        if (mounted) setState(() {
+          _msg = 'None of the available Story TV qualities could be played on this device.';
+          _showPickInMsg = true;
+          _buffering = false;
+        });
       }
     } catch (e) {
       _transitioning = false;
@@ -173,7 +183,7 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _buffering = false;
   bool _wasPlaying = false;
 
-  Future<void> _load(Source s) async {
+  Future<bool> _load(Source s) async {
     final pr = app.progress[progressKey(_item, _ep)];
     final resume = pr != null && pr.t > 5 && pr.d - pr.t > 10;
     _startAt = resume ? Duration(seconds: pr.t.toInt()) : null;
@@ -195,7 +205,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _player = controller;
     try {
       await controller.initialize();
-      if (!mounted || _player != controller) return;
+      if (!mounted || _player != controller) return false;
       final videoSize = controller.value.size;
       final isLandscape = videoSize.width >= videoSize.height;
       await SystemChrome.setPreferredOrientations(isLandscape
@@ -215,6 +225,7 @@ class _PlayerPageState extends State<PlayerPage> {
       });
       await controller.play();
       if (mounted) setState(() {});
+      return true;
     } catch (e) {
       _transitioning = false;
       if (!mounted) return;
@@ -223,6 +234,7 @@ class _PlayerPageState extends State<PlayerPage> {
         _showPickInMsg = true;
         _buffering = false;
       });
+      return false;
     }
   }
 
@@ -379,6 +391,11 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   int _sourceResolution(Source s) {
+    final namedQuality = RegExp(r'(\\d{3,4})\\s*p?', caseSensitive:false).firstMatch(s.name);
+    if (namedQuality != null) {
+      final namedValue = int.tryParse(namedQuality.group(1) ?? '') ?? 0;
+      if (namedValue >= 240 && namedValue <= 4320) return namedValue;
+    }
     final text = '${s.name} ${s.note ?? ''} ${s.url ?? ''}'.toLowerCase();
     if (RegExp(r'\b(8k|4320)\b').hasMatch(text)) return 4320;
     if (RegExp(r'\b(4k|2160|uhd)\b').hasMatch(text)) return 2160;
