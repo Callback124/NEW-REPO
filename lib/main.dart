@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 import 'bubble_nav_bar.dart';
 import 'downloads_page.dart';
@@ -12,6 +13,11 @@ import 'store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.stratus.music.playback',
+    androidNotificationChannelName: 'JioSaavn Music',
+    androidNotificationOngoing: true,
+  );
   await app.init();
   await DownloadService.instance.loadSettings();
   runApp(const StratusApp());
