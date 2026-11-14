@@ -5,6 +5,7 @@ import 'downloads_page.dart';
 import 'downloads_service.dart';
 import 'home_page.dart';
 import 'library_page.dart';
+import 'music_page.dart';
 import 'search_page.dart';
 import 'settings_page.dart';
 import 'store.dart';
@@ -69,10 +70,11 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   int _i = 0;
 
-  static const _pages = <Widget>[HomePage(), SearchPage(), DownloadsPage(), LibraryPage(), SettingsPage()];
+  static const _pages = <Widget>[HomePage(), SearchPage(), MusicPage(), DownloadsPage(), LibraryPage(), SettingsPage()];
   static const _dest = <({IconData icon, IconData selected, String label})>[
     (icon: Icons.home_outlined, selected: Icons.home, label: 'Home'),
     (icon: Icons.search, selected: Icons.search, label: 'Search'),
+    (icon: Icons.music_note_outlined, selected: Icons.music_note, label: 'Music'),
     (icon: Icons.download_outlined, selected: Icons.download, label: 'Downloads'),
     (icon: Icons.bookmark_border, selected: Icons.bookmark, label: 'Library'),
     (icon: Icons.tune, selected: Icons.tune, label: 'Settings'),
@@ -81,7 +83,7 @@ class _ShellState extends State<Shell> {
   @override
   void initState() {
     super.initState();
-    DownloadService.instance.onOpenDownloads = () { if (mounted) setState(() => _i = 2); };
+    DownloadService.instance.onOpenDownloads = () { if (mounted) setState(() => _i = 3); };
   }
 
   @override
