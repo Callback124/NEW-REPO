@@ -473,8 +473,17 @@ class MovieBoxAdapter extends Adapter {
       final seen = <String>{};
       void addUrl(dynamic value, {String label = 'Auto', bool streamContext = false}) {
         if (value is Map) {
-          for (final key in ['url', 'playUrl', 'link', 'src', 'file', 'masterUrl']) {
-            if (value[key] != null) addUrl(value[key], label: label, streamContext: streamContext);
+          final map = Map<String, dynamic>.from(value);
+          final meta = (map['resolution'] ?? map['quality'] ?? map['format'] ??
+              map['mimeType'] ?? map['type'] ?? label).toString();
+          for (final entry in map.entries) {
+            final key = entry.key;
+            if (['url', 'playUrl', 'link', 'src', 'file', 'masterUrl', 'downloadUrl'].contains(key)) {
+              addUrl(entry.value, label: meta, streamContext: streamContext);
+            } else if (entry.value is Map || entry.value is List) {
+              final keyLooksLikeQuality = RegExp(r'(4320|2160|1440|1080|720|540|480|360)\s*p?', caseSensitive: false).hasMatch(key);
+              addUrl(entry.value, label: keyLooksLikeQuality ? key : meta, streamContext: streamContext);
+            }
           }
           return;
         }
@@ -513,13 +522,21 @@ class MovieBoxAdapter extends Adapter {
             final key = entry.key.toLowerCase();
             final isStreamBranch = streamContext ||
                 ['streams', 'hls', 'dash', 'mp4', 'sources', 'source', 'playlist',
-                 'playlist', 'playlistinfo', 'playinfo', 'playsource',
-                 'playsources', 'videos', 'video', 'qualities', 'urlinfo']
+                 'playlistinfo', 'playinfo', 'playsource', 'playsources',
+                 'videos', 'video', 'qualities', 'urlinfo']
                     .contains(key);
+            final keyLooksLikeQuality = RegExp(
+              r'(4320|2160|1440|1080|900|720|540|480|360)\s*p?',
+              caseSensitive: false,
+            ).hasMatch(entry.key);
+            final childLabel = keyLooksLikeQuality ? entry.key :
+                key == 'hls' ? 'HLS' : key == 'dash' ? 'DASH' :
+                key == 'mp4' ? 'MP4' : quality;
             if (entry.value is Map || entry.value is List) {
-              final childLabel = key == 'hls' ? 'HLS' : key == 'dash' ? 'DASH' :
-                  key == 'mp4' ? 'MP4' : quality;
               scan(entry.value, childLabel, depth + 1, isStreamBranch);
+            } else if (entry.value is String && isHttp(entry.value.toString()) &&
+                keyLooksLikeQuality) {
+              addUrl(entry.value, label: childLabel, streamContext: true);
             }
           }
         }
