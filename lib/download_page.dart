@@ -296,18 +296,18 @@ class _DownloadPageState extends State<DownloadPage> {
             final source = variants.firstWhere((x) => x.name == choice.quality,
               orElse: () => variants.isNotEmpty ? variants.first : throw Exception('No downloadable quality found.'));
             final episodeFile = '${work.path}/episode_${i.toString().padLeft(4, '0')}.mp4';
-            final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\\r\\n').join();
+            final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join();
             final session = await FFmpegKit.executeWithArguments([
               '-y',
               '-headers', headers, '-i', master.url!,
               '-headers', headers, '-i', source.url!,
               '-map', '1:v:0', '-map', '0:a:0?', '-c', 'copy',
-              '-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart', episodeFile,
+              '-bsf:a', 'aac_adtstoasc', episodeFile,
             ]);
             final code = await session.getReturnCode();
             if (!ReturnCode.isSuccess(code)) {
               final logs = await session.getOutput();
-              throw Exception('Episode ${choice.episode!.episode} failed. ${(logs ?? '').split('\\n').reversed.take(5).toList().reversed.join(' ')}');
+              throw Exception('Episode ${choice.episode!.episode} failed. ${(logs ?? '').split('\n').reversed.take(5).toList().reversed.join(' ')}');
             }
             if (!await File(episodeFile).exists() || await File(episodeFile).length() == 0) {
               throw Exception('Episode ${choice.episode!.episode} produced an empty video.');
