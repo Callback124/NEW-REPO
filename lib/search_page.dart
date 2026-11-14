@@ -151,6 +151,14 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
           }
           return _Group(p, page.items, null);
         }
+        if (p.kind == 'storytv') {
+          final page = await StoryTvAdapter().searchPage(p, q, page: 0);
+          if (mounted && my == _token) {
+            _page = 0;
+            _hasMore = page.hasMore;
+          }
+          return _Group(p, page.items, null);
+        }
         return _Group(p, await adapterFor(p).search(p, q), null);
       } catch (e) {
         return _Group(p, const [], e);
@@ -162,6 +170,7 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
       _loading = false;
     });
     _saveSession();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
   }
 
   void _onScroll() {
@@ -170,26 +179,30 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
   }
 
   Future<void> _loadMore() async {
-    final matches = app.scope().where((x) => x.kind == 'moviebox').toList();
+    final matches = app.scope().where((x) => x.kind == 'moviebox' || x.kind == 'storytv').toList();
     if (matches.isEmpty) return;
     final p = matches.first;
     setState(() => _loadingMore = true);
     try {
-      final next = await MovieBoxAdapter().searchPage(p, _query, page: _page + 1);
+      final next = p.kind == 'storytv'
+          ? await StoryTvAdapter().searchPage(p, _query, page: _page + 1)
+          : await MovieBoxAdapter().searchPage(p, _query, page: _page + 1);
       if (!mounted) return;
       final idx = _groups.indexWhere((g) => g.provider.id == p.id);
       if (idx >= 0) {
         final updated = [..._groups];
         final old = updated[idx];
         final seen = old.items.map((x) => x.id).toSet();
-        updated[idx] = _Group(p, [...old.items, ...next.items.where((x) => !seen.contains(x.id))], null);
+        final fresh = next.items.where((x) => seen.add(x.id)).toList();
+        updated[idx] = _Group(p, [...old.items, ...fresh], null);
         setState(() {
           _groups = updated;
           _page++;
-          _hasMore = next.hasMore;
+          _hasMore = next.hasMore && fresh.isNotEmpty;
           _loadingMore = false;
         });
         _saveSession();
+        WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
       } else {
         setState(() => _loadingMore = false);
       }
