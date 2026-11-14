@@ -404,7 +404,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _pickSource() {
     if (_srcs.isEmpty || !mounted) return;
-    final useStoryTvTracks = _item.pid == 'storytv' && _storyTvTracks.isNotEmpty;
+    final useStoryTvTracks = (_item.pid == 'storytv' || _item.pid == 'freereels') && _storyTvTracks.isNotEmpty;
     _sheet('Sources', [
       if (useStoryTvTracks) ...[
         for (final track in _storyTvTracks)
@@ -421,10 +421,10 @@ class _PlayerPageState extends State<PlayerPage> {
               _selectStoryTvQuality(track);
             },
           ),
-      ] else if (_item.pid == 'storytv') ...[
+      ] else if (_item.pid == 'storytv' || _item.pid == 'freereels') ...[
         const ListTile(
           title: Text('Quality options unavailable'),
-          subtitle: Text('This player did not expose HLS video tracks.'),
+          subtitle: Text('This player did not expose HLS video tracks. Check that the master playlist is reachable.'),
         ),
       ] else ...[
         for (final s in _srcs)
