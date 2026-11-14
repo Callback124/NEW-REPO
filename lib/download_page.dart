@@ -145,7 +145,7 @@ class _DownloadPageState extends State<DownloadPage> {
         ..sort((a, b) => _qualityRank(b.quality).compareTo(_qualityRank(a.quality)));
         if (_choices.isEmpty) throw Exception('No direct MP4 download source is available for this title.');
       } else {
-        final eps = _item.pid == 'storytv' ? _item.episodes : _pageEpisodes;
+        final eps = _item.pid == 'storytv' ? _item.episodes.take(1).toList() : _pageEpisodes;
         _scanTotal = eps.length;
         final found = <_DownloadChoice>[];
         var cursor = 0;
@@ -454,7 +454,7 @@ class _DownloadPageState extends State<DownloadPage> {
                 ),
                 itemBuilder: (context, i) {
                   final ep = episodes[i];
-                  final available = choices.any((x) => x.episode?.id == ep.id);
+                  final available = _item.pid == 'storytv' || choices.any((x) => x.episode?.id == ep.id);
                   final selected = _selected.contains(ep.id);
                   return Card(
                     margin: EdgeInsets.zero,
@@ -505,7 +505,7 @@ class _DownloadPageState extends State<DownloadPage> {
             if (_series && _item.pid == 'storytv' && _downloadMode == 'custom')
               Row(children: [
                 TextButton(onPressed: () => setState(() => _selected.addAll(episodes
-                  .where((e) => choices.any((x) => x.episode?.id == e.id)).map((e) => e.id)),
+                  .where((e) => _item.pid == 'storytv' || choices.any((x) => x.episode?.id == e.id)).map((e) => e.id)),
                   child: const Text('Select All')),
                 Text('${_selected.length} selected'),
                 const Spacer(),
@@ -536,7 +536,7 @@ class _DownloadPageState extends State<DownloadPage> {
                       _selected
                         ..clear()
                         ..addAll(_item.episodes.where((e) => nums.contains(e.episode) &&
-                          choices.any((x) => x.episode?.id == e.id)).map((e) => e.id));
+                          (_item.pid == 'storytv' || choices.any((x) => x.episode?.id == e.id))).map((e) => e.id));
                     });
                   } catch (_) {
                     if (mounted) ScaffoldMessenger.of(context).showSnackBar(
