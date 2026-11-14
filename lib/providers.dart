@@ -96,6 +96,7 @@ abstract class Adapter {
 
 Adapter adapterFor(ProviderDef p) => switch (p.kind) {
       'storytv' => StoryTvAdapter(),
+      'freereels' => FreeReelsAdapter(),
       'moviebox' => MovieBoxAdapter(),
       'stremio' => StremioAdapter(),
       'json' => JsonAdapter(),
@@ -748,6 +749,194 @@ class StoryTvAdapter extends Adapter {
   }
 }
 
+
+
+/* ---------- Free Reels vertical drama provider ---------- */
+class FreeReelsEpisode {
+  const FreeReelsEpisode({required this.id, required this.name, required this.index,
+    this.videoUrl = '', this.h264 = '', this.m3u8 = '', this.h265 = '', this.unlock = true});
+  final String id, name, videoUrl, h264, m3u8, h265;
+  final int index;
+  final bool unlock;
+}
+
+class FreeReelsAdapter extends Adapter {
+  static const _base = 'https://apiv2.free-reels.com';
+  static const _headers = <String, String>{
+    'authorization': 'oauth_signature=bf505aa6bb04c96350296bed13d0a920,oauth_token=fyqFvwztTYc5x8v8egEYrfa88WfQCL5D,ts=1789800192295',
+    'content-type': 'application/json; charset=UTF-8', 'accept': 'application/json',
+    'country': 'IN', 'timezone': '+5', 'language': 'en-US', 'device-country': 'US',
+    'app-display-lang': 'en-US', 'device-language': 'en-US',
+    'device-id': 'BC7C2318F4322CFFE00CBDE5043E5644', 'android-id': 'bc29b75f90824a5c',
+    'appsflyer-id': '1789721594808-3992160409787450647',
+    'x-appsflyer_id': '1789721594808-3992160409787450647',
+    'gaid': 'dfa2b45c-0134-49be-87b0-47203e73a707',
+    'firebase-id': 'a2ec25128fa6336d28b449c28a2943a9',
+    'session-id': '58cfafdd-6bb0-409c-8391-df9687441d82',
+    'app-name': 'com.freereels.app', 'app-version': '2.4.80', 'device': 'android',
+    'x-device-brand': 'Infinix', 'x-device-manufacturer': 'INFINIX',
+    'x-device-model': 'Infinix X6711', 'x-device-product': 'X6711-GL',
+    'device-version': '34', 'user-agent': 'okhttp/4.12.0',
+  };
+  static final http.Client _client = http.Client();
+  static final Map<String, List<FreeReelsEpisode>> _episodes = {};
+  static final Map<String, String> _moduleKeys = {};
+  static final Map<String, String?> _cursors = {};
+
+  Future<dynamic> _request(String path, {Map<String, dynamic>? body}) async {
+    final request = body == null
+      ? http.Request('GET', Uri.parse(_base + path))
+      : (http.Request('POST', Uri.parse(_base + path))..body = jsonEncode(body));
+    request.headers.addAll(_headers);
+    http.Response response;
+    try {
+      response = await http.Response.fromStream(
+        await _client.send(request).timeout(const Duration(seconds: 25)));
+    } on TimeoutException {
+      throw ProviderError('Free Reels request timed out.');
+    } catch (e) {
+      throw ProviderError('Free Reels network error: ' + e.toString());
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ProviderError('Free Reels HTTP ' + response.statusCode.toString() +
+        ': ' + utf8.decode(response.bodyBytes));
+    }
+    try {
+      final json = jsonDecode(utf8.decode(response.bodyBytes));
+      if (json is Map && json['code'] != null &&
+          !['0', '200'].contains(json['code'].toString())) {
+        throw ProviderError('Free Reels API error: ' +
+          (json['message'] ?? json['code']).toString());
+      }
+      return json;
+    } on FormatException {
+      throw ProviderError('Free Reels returned invalid JSON.');
+    }
+  }
+
+  Map _data(dynamic j) => j is Map && j['data'] is Map ? j['data'] as Map : const {};
+  List _list(dynamic v) => v is List ? v : const [];
+
+  Item? _item(ProviderDef p, Map raw) {
+    final id = (raw['key'] ?? raw['series_id'] ?? raw['id'] ?? raw['drama_id'] ?? '').toString();
+    final title = (raw['title'] ?? raw['name'] ?? '').toString().trim();
+    if (id.isEmpty && title.isEmpty) return null;
+    final cover = (raw['cover'] ?? raw['cover_url'] ?? raw['image'] ?? '').toString();
+    final tags = _list(raw['tag'] ?? raw['series_tag']).map((x) => x.toString())
+      .where((x) => x.trim().isNotEmpty).toList();
+    return Item(pid: p.id, id: id, type: 'series',
+      title: title.isEmpty ? 'Untitled' : title,
+      poster: isHttp(cover) ? cover : null, bg: isHttp(cover) ? cover : null,
+      plot: (raw['desc'] ?? raw['description'] ?? '').toString(),
+      genres: tags.take(4).toList(), subjectType: 7,
+      corner: tags.isEmpty ? null : tags.first);
+  }
+
+  Future<List<Item>> _parseHome(ProviderDef p) async {
+    final uri = Uri(path: '/frv2-api/homepage/v2/tab/index', queryParameters: {
+      'tab_key': '514', 'position_index': '10003', 'rec_trigger': '1',
+      'user_new_theater': 'false', 'is_app_coldstart': 'false',
+    });
+    final data = _data(await _request(uri.toString()));
+    final out = <Item>[];
+    for (final module in _list(data['items']).whereType<Map>()) {
+      final key = (module['module_key'] ?? '').toString();
+      if (key.isNotEmpty) _moduleKeys[p.id] = key;
+      for (final raw in _list(module['items']).whereType<Map>()) {
+        final item = _item(p, raw);
+        if (item != null && item.id.isNotEmpty) out.add(item);
+      }
+    }
+    final page = data['page_info'] is Map ? data['page_info'] as Map : const {};
+    _cursors[p.id] = page['next']?.toString();
+    return out;
+  }
+
+  Future<List<Item>> loadMore(ProviderDef p) async {
+    final cursor = _cursors[p.id] ?? '';
+    if (cursor.isEmpty) return [];
+    final data = _data(await _request('/frv2-api/homepage/v2/tab/feed', body: {
+      'next': cursor, 'module_key': _moduleKeys[p.id] ?? '1063',
+      'user_new_theater': false,
+    }));
+    final page = data['page_info'] is Map ? data['page_info'] as Map : const {};
+    _cursors[p.id] = page['next']?.toString();
+    return _list(data['items']).whereType<Map>().map((x) => _item(p, x))
+      .whereType<Item>().where((x) => x.id.isNotEmpty).toList();
+  }
+
+  bool get hasMore => _cursors.values.any((x) => x != null && x!.isNotEmpty);
+
+  @override
+  Future<List<Shelf>> home(ProviderDef p) async {
+    final items = await _parseHome(p);
+    if (items.isEmpty) throw ProviderError('Free Reels returned no dubbed dramas.');
+    return [Shelf('Dubbed', items)];
+  }
+
+  Future<List<FreeReelsEpisode>> fetchEpisodes(String id) async {
+    if (_episodes.containsKey(id)) return _episodes[id]!;
+    final uri = Uri(path: '/frv2-api/drama/info_v2',
+      queryParameters: {'series_id': id, 'clip_content': ''});
+    final info = _data(await _request(uri.toString()))['info'];
+    final raw = info is Map ? _list(info['episode_list']) : const [];
+    final out = <FreeReelsEpisode>[];
+    for (final e in raw.whereType<Map>()) {
+      final n = int.tryParse((e['index'] ?? out.length + 1).toString()) ?? out.length + 1;
+      out.add(FreeReelsEpisode(id: (e['id'] ?? n).toString(),
+        name: (e['name'] ?? 'Episode ' + n.toString()).toString(), index: n,
+        videoUrl: (e['video_url'] ?? '').toString(),
+        h264: (e['external_audio_h264_m3u8'] ?? '').toString(),
+        m3u8: (e['m3u8_url'] ?? '').toString(),
+        h265: (e['external_audio_h265_m3u8'] ?? '').toString(),
+        unlock: e['unlock'] is bool ? e['unlock'] as bool : true));
+    }
+    out.sort((a, b) => a.index.compareTo(b.index));
+    _episodes[id] = out;
+    return out;
+  }
+
+  @override
+  Future<Item> detail(ProviderDef p, Item item) async {
+    final eps = await fetchEpisodes(item.id);
+    return item.copyWith(episodes: eps.map((e) =>
+      Episode(id: e.id, season: 1, episode: e.index, title: e.name)).toList(),
+      plot: item.plot?.isNotEmpty == true ? item.plot : eps.length.toString() + ' episodes');
+  }
+
+  @override
+  Future<List<Source>> sources(ProviderDef p, Item item, Episode? ep) async {
+    final eps = await fetchEpisodes(item.id);
+    final n = ep?.episode ?? int.tryParse(ep?.id ?? '') ?? 1;
+    final selected = eps.firstWhere((e) => e.index == n || e.id == ep?.id,
+      orElse: () => throw ProviderError('Free Reels episode ' + n.toString() + ' was not found.'));
+    if (!selected.unlock) throw ProviderError('This Free Reels episode is locked.');
+    final url = [selected.videoUrl, selected.h264, selected.m3u8, selected.h265]
+      .firstWhere((x) => isHttp(x), orElse: () => '');
+    if (url.isEmpty) throw ProviderError('No playable Free Reels stream for episode ' + n.toString());
+    return [Source.clean(name: url.toLowerCase().contains('.m3u8')
+      ? 'Auto · adaptive quality' : 'Original', url: url, headers: _headers)];
+  }
+
+  Future<List<String>> suggestions(String q) async {
+    if (q.trim().isEmpty) return [];
+    final data = _data(await _request('/frv2-api/search/keywords', body: {'keyword': q.trim()}));
+    return _list(data['keywords']).map((x) =>
+      x is Map ? (x['keyword'] ?? '').toString() : x.toString())
+      .where((x) => x.isNotEmpty).take(8).toList();
+  }
+
+  @override
+  Future<List<Item>> search(ProviderDef p, String q) async {
+    if (q.trim().isEmpty) return [];
+    final data = _data(await _request('/frv2-api/search/drama', body: {
+      'keyword': q.trim(), 'audio_tab_key': 'mix', 'next': '',
+    }));
+    final raw = data['items'] ?? data['drama_list'] ?? data['search_items'];
+    return _list(raw).whereType<Map>().map((x) => _item(p, x))
+      .whereType<Item>().where((x) => x.id.isNotEmpty).toList();
+  }
+}
 
 /* ---------- Stremio-compatible addons ---------- */
 
