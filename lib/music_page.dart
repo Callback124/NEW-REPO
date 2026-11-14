@@ -83,9 +83,10 @@ class SaavnFullPlayer extends StatefulWidget {
 }
 class _SaavnFullPlayerState extends State<SaavnFullPlayer>{
   final p=JioSaavnPlayer.instance;
+  bool shuffle=false, repeat=false;
   String time(Duration d)=>d.inMinutes.toString()+':'+(d.inSeconds%60).toString().padLeft(2,'0');
   @override
-  Widget build(BuildContext context)=>ValueListenableBuilder<int>(valueListenable:p.revision,builder:(context,_,__){final s=p.current;if(s==null)return const Scaffold(body:Center(child:Text('Nothing playing')));return Scaffold(backgroundColor:const Color(0xFF15171E),appBar:AppBar(backgroundColor:const Color(0xFF15171E),foregroundColor:Colors.white,title:const Text('Playing now'),centerTitle:true,actions:[IconButton(onPressed:_queue,icon:const Icon(Icons.queue_music))]),body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,12,24,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+  Widget build(BuildContext context)=>ValueListenableBuilder<int>(valueListenable:p.revision,builder:(context,_,__){final s=p.current;if(s==null)return const Scaffold(body:Center(child:Text('Nothing playing')));return Scaffold(backgroundColor:const Color(0xFF15171E),appBar:AppBar(backgroundColor:const Color(0xFF15171E),foregroundColor:Colors.white,title:const Text('Playing now'),centerTitle:true,actions:[IconButton(onPressed:_queue,icon:const Icon(Icons.queue_music)),IconButton(onPressed:_lyrics,icon:const Icon(Icons.lyrics_outlined)),PopupMenuButton<String>(onSelected:(v){if(v=='quality')_quality();if(v=='lyrics')_lyrics();},itemBuilder:(_)=>const [PopupMenuItem(value:'quality',child:Text('Audio quality')),PopupMenuItem(value:'lyrics',child:Text('Lyrics'))])]),body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,12,24,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Expanded(flex:6,child:Center(child:AspectRatio(aspectRatio:1,child:ClipRRect(borderRadius:BorderRadius.circular(22),child:Image.network(s.image,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const ColoredBox(color:Colors.black26,child:Icon(Icons.music_note,size:90,color:Colors.white))))))),
     const SizedBox(height:24),Row(children:[Expanded(child:Text(s.title,style:const TextStyle(color:Colors.white,fontSize:28,fontWeight:FontWeight.w700),maxLines:2,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Favorite saved in a later music update'))),icon:const Icon(Icons.favorite,color:Color(0xFF7CE8E7),size:30))]),
     Text(s.artist,style:const TextStyle(color:Colors.white60,fontSize:18)),const SizedBox(height:24),
@@ -94,11 +95,11 @@ class _SaavnFullPlayerState extends State<SaavnFullPlayer>{
       Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(time(pos),style:const TextStyle(color:Colors.white38,fontSize:11)),Text(time(total),style:const TextStyle(color:Colors.white38,fontSize:11))]),
     ]);}),
     const Spacer(),Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
-      IconButton(color:Colors.white70,onPressed:_quality,icon:const Icon(Icons.high_quality_outlined)),
+      IconButton(color:shuffle?_musicAccent:Colors.white70,onPressed:()async{shuffle=!shuffle;await p.audio.setShuffleModeEnabled(shuffle);if(mounted)setState((){});},icon:const Icon(Icons.shuffle_rounded)),
       IconButton(color:Colors.white,onPressed:p.previous,icon:const Icon(Icons.skip_previous_rounded,size:36)),
       StreamBuilder<PlayerState>(stream:p.audio.playerStateStream,builder:(context,snap)=>Container(width:78,height:78,decoration:const BoxDecoration(color:_musicAccent,shape:BoxShape.circle),child:IconButton(color:const Color(0xFF10252A),iconSize:38,onPressed:()=>snap.data?.playing==true?p.audio.pause():p.audio.play(),icon:Icon(snap.data?.playing==true?Icons.pause_rounded:Icons.play_arrow_rounded)))),
       IconButton(color:Colors.white,onPressed:p.next,icon:const Icon(Icons.skip_next_rounded,size:36)),
-      IconButton(color:Colors.white70,onPressed:_lyrics,icon:const Icon(Icons.lyrics_outlined)),
+      IconButton(color:repeat?_musicAccent:Colors.white70,onPressed:()async{repeat=!repeat;await p.audio.setLoopMode(repeat?LoopMode.one:LoopMode.off);if(mounted)setState((){});},icon:const Icon(Icons.repeat_rounded)),
     ]),const SizedBox(height:10),
   ]))));});
   Future<void> _quality()async{final q=await showDialog<String>(context:context,builder:(ctx)=>SimpleDialog(title:const Text('Audio quality'),children:[for(final v in ['320','160','96'])SimpleDialogOption(onPressed:()=>Navigator.pop(ctx,v),child:Text(v+' kbps'+(p.bitrate==v?' ✓':'')))]));if(q!=null){try{await p.setQuality(q);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.toString())));}}}
