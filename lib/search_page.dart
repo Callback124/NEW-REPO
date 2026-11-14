@@ -184,21 +184,29 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     final p = matches.first;
     setState(() => _loadingMore = true);
     try {
-      final next = p.kind == 'storytv'
-          ? await StoryTvAdapter().searchPage(p, _query, page: _page + 1)
-          : await MovieBoxAdapter().searchPage(p, _query, page: _page + 1);
+      late final List<Item> nextItems;
+      late final bool moreAvailable;
+      if (p.kind == 'storytv') {
+        final page = await StoryTvAdapter().searchPage(p, _query, page: _page + 1);
+        nextItems = page.items;
+        moreAvailable = page.hasMore;
+      } else {
+        final page = await MovieBoxAdapter().searchPage(p, _query, page: _page + 1);
+        nextItems = page.items;
+        moreAvailable = page.hasMore;
+      }
       if (!mounted) return;
       final idx = _groups.indexWhere((g) => g.provider.id == p.id);
       if (idx >= 0) {
         final updated = [..._groups];
         final old = updated[idx];
         final seen = old.items.map((x) => x.id).toSet();
-        final fresh = next.items.where((x) => seen.add(x.id)).toList();
+        final fresh = nextItems.where((x) => seen.add(x.id)).toList();
         updated[idx] = _Group(p, [...old.items, ...fresh], null);
         setState(() {
           _groups = updated;
           _page++;
-          _hasMore = next.hasMore && fresh.isNotEmpty;
+          _hasMore = moreAvailable && fresh.isNotEmpty;
           _loadingMore = false;
         });
         _saveSession();
