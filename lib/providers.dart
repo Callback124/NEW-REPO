@@ -865,7 +865,7 @@ class FreeReelsAdapter extends Adapter {
       .whereType<Item>().where((x) => x.id.isNotEmpty).toList();
   }
 
-  bool get hasMore => _cursors.values.any((x) => x != null && x!.isNotEmpty);
+  static bool hasMoreFor(String id) => _cursors[id] != null && _cursors[id]!.isNotEmpty;
 
   @override
   Future<List<Shelf>> home(ProviderDef p) async {
