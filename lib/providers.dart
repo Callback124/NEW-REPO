@@ -686,14 +686,16 @@ class StoryTvAdapter extends Adapter {
   }
 
   bool _moreFrom(Map data, int page, int size, List raw) {
-    final totalPages = int.tryParse((data['totalPages'] ?? data['pageCount'] ?? '').toString());
-    if (totalPages != null) return page + 1 < totalPages;
-    final totalElements = int.tryParse((data['totalElements'] ?? data['total'] ?? data['count'] ?? '').toString());
-    if (totalElements != null) return (page + 1) * size < totalElements;
+    final hasNext = data['hasNext'] ?? data['hasMore'] ?? data['nextPage'];
+    if (hasNext is bool) return hasNext;
     final last = data['last'] ?? data['isLast'];
     if (last is bool) return !last;
-    final hasNext = data['hasNext'] ?? data['hasMore'];
-    if (hasNext is bool) return hasNext;
+    final totalPages = int.tryParse((data['totalPages'] ?? data['totalPageCount'] ??
+        data['totalPage'] ?? data['pageCount'] ?? '').toString());
+    if (totalPages != null && totalPages > 0) return page + 1 < totalPages;
+    final totalElements = int.tryParse((data['totalElements'] ??
+        data['totalCount'] ?? data['total'] ?? data['count'] ?? '').toString());
+    if (totalElements != null) return (page + 1) * size < totalElements;
     return raw.length >= size;
   }
 
@@ -703,7 +705,7 @@ class StoryTvAdapter extends Adapter {
     final data=j['data'] is Map ? j['data'] as Map : const {};
     final raw=data['content'] is List ? data['content'] as List : const [];
     final items=raw.whereType<Map>().where(_isHindiShow).map((x)=>_item(p,x)).where((x)=>x.id.isNotEmpty).toList();
-    return StoryTvPageResult(items, _moreFrom(data, page, size, raw));
+    return StoryTvPageResult(items, _moreFrom({...j as Map, ...data}, page, size, raw));
   }
 
   @override Future<List<Shelf>> home(ProviderDef p) async {
