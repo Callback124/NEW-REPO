@@ -28,6 +28,22 @@ jobs:
           cp -r /tmp/shell/android ./android
           cp /tmp/shell/.metadata ./.metadata
 
+          # FFmpegKit HTTPS requires Android API 24 or newer.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/build.gradle.kts")
+          if p.exists():
+              s = p.read_text()
+              s = re.sub(r'minSdk = flutter\\.minSdkVersion', 'minSdk = 24', s)
+              p.write_text(s)
+          else:
+              p = Path("android/app/build.gradle")
+              s = p.read_text()
+              s = re.sub(r'minSdkVersion flutter\\.minSdkVersion', 'minSdkVersion 24', s)
+              p.write_text(s)
+          PY
+
           # Native Android DownloadManager keeps downloads alive outside the Flutter UI.
           mkdir -p android/app/src/main/kotlin/app/stratus/stratus
           cat > android/app/src/main/kotlin/app/stratus/stratus/MainActivity.kt <<'KOTLIN'
