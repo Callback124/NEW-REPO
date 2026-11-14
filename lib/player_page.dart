@@ -31,6 +31,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late Episode? _ep = widget.ep;
   late List<Episode> _episodes = widget.list;
   List<Source> _srcs = const [];
+  final Set<String> _failedSourceUrls = <String>{};
   Source? _cur;
   String? _msg = 'Finding sources…';
   bool _ended = false;
@@ -102,6 +103,7 @@ class _PlayerPageState extends State<PlayerPage> {
       final l = await getSources(_item, _ep);
       if (!mounted || gen != _gen) return;
       _srcs = l;
+      _failedSourceUrls.clear();
       final ok = l.where((s) =>
           s.playable && (_sourceResolution(s) == 0 || _sourceResolution(s) <= 1080)).toList()
         ..sort((a, b) => _sourceResolution(b).compareTo(_sourceResolution(a)));
@@ -153,6 +155,22 @@ class _PlayerPageState extends State<PlayerPage> {
           value.duration.inSeconds.toDouble());
     }
     if (value.hasError) {
+      if (_item.pid == 'storytv') {
+        if (_cur?.url != null) _failedSourceUrls.add(_cur!.url!);
+        Source? fallback;
+        for (final source in _srcs) {
+          if (source.playable &&
+              !_failedSourceUrls.contains(source.url) &&
+              (_sourceResolution(source) == 0 || _sourceResolution(source) <= 1080)) {
+            fallback = source;
+            break;
+          }
+        }
+        if (fallback != null) {
+          unawaited(_load(fallback));
+          return;
+        }
+      }
       setState(() {
         _msg = value.errorDescription ?? 'This source could not be played. Try another one.';
         _showPickInMsg = true;
@@ -227,6 +245,7 @@ class _PlayerPageState extends State<PlayerPage> {
       if (mounted) setState(() {});
       return true;
     } catch (e) {
+      _failedSourceUrls.add(s.url!);
       _transitioning = false;
       if (!mounted) return false;
       setState(() {
