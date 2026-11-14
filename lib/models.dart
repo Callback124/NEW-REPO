@@ -255,7 +255,7 @@ class ProviderDef {
       );
 
   String get kindLabel => switch (kind) {
-        'moviebox' || 'storytv' => 'Built-in',
+        'moviebox' || 'storytv' || 'freereels' => 'Built-in',
         'stremio' => 'Stremio addon',
         'json' => 'JSON catalog',
         _ => kind,
