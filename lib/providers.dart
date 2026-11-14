@@ -603,6 +603,9 @@ class StoryTvAdapter extends Adapter {
   };
   static final http.Client _client = http.Client();
   static final Map<String, Future<dynamic>> _cache = {};
+  static final Map<String, bool> _homeHasMore = {};
+
+  static bool homeHasMore(String providerId) => _homeHasMore[providerId] ?? false;
   static Future<void>? _hindiFlight;
   static bool _hindiReady = false;
   Future<void> _ensureHindi() {
@@ -671,6 +674,7 @@ class StoryTvAdapter extends Adapter {
 
   @override Future<List<Shelf>> home(ProviderDef p) async {
     final page=await explorePage(p);
+    _homeHasMore[p.id] = page.hasMore;
     if(page.items.isEmpty) throw ProviderError('Story TV returned no Hindi dramas.');
     return [Shelf('Hindi Mini Dramas',page.items)];
   }
