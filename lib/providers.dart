@@ -578,6 +578,12 @@ class MovieBoxAdapter extends Adapter {
 
 
 /* ---------- Story TV Hindi micro-drama provider ---------- */
+class StoryTvPageResult {
+  const StoryTvPageResult(this.items, this.hasMore);
+  final List<Item> items;
+  final bool hasMore;
+}
+
 class StoryTvAdapter extends Adapter {
   static const _base = 'https://elitemods-tv.onrender.com';
   static const _apiToken = 'eyJhbGciOiJIUzI1NiJ9.eyJjcmVhdGVkRGF0ZSI6IkZyaSBKdW4gMTIgMDc6MDQ6MTAgVVRDIDIwMjYiLCJzZXNzaW9uSWQiOiIxNTI0MDExNDMiLCJkZXZpY2VJZCI6IjI4MDhkNDliN2UwOGI3MTYiLCJzdWIiOiIxMTYwMDQ2NDciLCJleHAiOjE3ODE1MDcwNTB9._GKqF_5WtYkgAIJVhkt3L27t9fvgLkFtfgaOLSPsrOA';
@@ -640,26 +646,48 @@ class StoryTvAdapter extends Adapter {
       bg:(show['imageUrl'] ?? raw['imageUrl'] ?? '').toString(),
       plot:(show['description'] ?? '').toString(),
       genres:[(meta['genre'] ?? show['genre'] ?? 'Drama').toString()],
-      subjectType:7, corner:'${show['numOfEpisodes'] ?? 0} Episodes');
+      subjectType:7, corner:null);
   }
-  @override Future<List<Shelf>> home(ProviderDef p) async {
+  bool _moreFrom(Map data, int page, int size, List raw) {
+    final totalPages = int.tryParse((data['totalPages'] ?? data['pageCount'] ?? '').toString());
+    if (totalPages != null) return page + 1 < totalPages;
+    final totalElements = int.tryParse((data['totalElements'] ?? data['total'] ?? data['count'] ?? '').toString());
+    if (totalElements != null) return (page + 1) * size < totalElements;
+    final last = data['last'] ?? data['isLast'] ?? data['hasNext'] == null ? null : null;
+    if (last is bool) return !last;
+    final hasNext = data['hasNext'] ?? data['hasMore'];
+    if (hasNext is bool) return hasNext;
+    return raw.length >= size;
+  }
+
+  Future<StoryTvPageResult> explorePage(ProviderDef p, {int page = 0, int size = 40}) async {
     await _ensureHindi();
-    final j=await _request('/feedservice/v2/explore/shows?page=0&size=40&intCount=0');
+    final j=await _request('/feedservice/v2/explore/shows?page=$page&size=$size&intCount=0');
     final data=j['data'] is Map ? j['data'] as Map : const {};
     final raw=data['content'] is List ? data['content'] as List : const [];
     final items=raw.whereType<Map>().map((x)=>_item(p,x)).where((x)=>x.id.isNotEmpty).toList();
-    if(items.isEmpty) throw ProviderError('Story TV returned no Hindi dramas.');
-    return [Shelf('Hindi Mini Dramas',items)];
+    return StoryTvPageResult(items, _moreFrom(data, page, size, raw));
   }
-  @override Future<List<Item>> search(ProviderDef p,String query) async {
+
+  @override Future<List<Shelf>> home(ProviderDef p) async {
+    final page=await explorePage(p);
+    if(page.items.isEmpty) throw ProviderError('Story TV returned no Hindi dramas.');
+    return [Shelf('Hindi Mini Dramas',page.items)];
+  }
+
+  Future<StoryTvPageResult> searchPage(ProviderDef p, String query, {int page = 0, int size = 40}) async {
     final q=Uri.encodeComponent(query.trim());
-    if(q.isEmpty) return [];
+    if(q.isEmpty) return const StoryTvPageResult([], false);
     await _ensureHindi();
-    final j=await _request('/searchservice/v1/search/$q');
+    final j=await _request('/searchservice/v1/search/$q?page=$page&size=$size');
     final data=j['data'] is Map ? j['data'] as Map : const {};
     final raw=data['content'] is List ? data['content'] as List : const [];
-    return raw.whereType<Map>().map((m)=>_item(p,m)).where((x)=>x.id.isNotEmpty).toList();
+    final items=raw.whereType<Map>().map((m)=>_item(p,m)).where((x)=>x.id.isNotEmpty).toList();
+    return StoryTvPageResult(items, _moreFrom(data, page, size, raw));
   }
+
+  @override Future<List<Item>> search(ProviderDef p,String query) async =>
+      (await searchPage(p, query)).items;
   Future<List<String>> suggestions(String query) async {
     final q=Uri.encodeComponent(query.trim());
     if(q.isEmpty) return [];
@@ -692,6 +720,40 @@ class StoryTvAdapter extends Adapter {
       genres:[(d['genre'] ?? (item.genres.isNotEmpty ? item.genres.first : 'Drama')).toString()],
       episodes:eps, plot:'$count episodes');
   }
+  Future<String> _limitHlsTo1080(String url) async {
+    try {
+      final response = await _client.get(Uri.parse(url), headers: _playerHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode < 200 || response.statusCode >= 300) return url;
+      final body = utf8.decode(response.bodyBytes);
+      if (!body.contains('#EXT-X-STREAM-INF')) return url;
+      final lines = body.split(RegExp(r'\\r?\\n'));
+      final variants = <({int height, String uri})>[];
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i].trim();
+        if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
+        final resolution = RegExp(r'RESOLUTION=\\d+x(\\d+)', caseSensitive: false).firstMatch(line);
+        final height = int.tryParse(resolution?.group(1) ?? '') ?? 0;
+        var next = i + 1;
+        while (next < lines.length && lines[next].trim().isEmpty) { next++; }
+        if (next < lines.length && !lines[next].trim().startsWith('#')) {
+          variants.add((height: height, uri: Uri.parse(url).resolve(lines[next].trim()).toString()));
+        }
+      }
+      if (variants.isEmpty) return url;
+      final supported = variants.where((v) => v.height > 0 && v.height <= 1080).toList()
+        ..sort((a, b) => b.height.compareTo(a.height));
+      if (supported.isEmpty) {
+        throw ProviderError('Story TV stream has no 1080p-or-lower HLS variant for this device.');
+      }
+      return supported.first.uri;
+    } on ProviderError {
+      rethrow;
+    } catch (_) {
+      return url;
+    }
+  }
+
   @override Future<List<Source>> sources(ProviderDef p,Item item,Episode? ep) async {
     await _ensureHindi();
     final number=ep?.episode ?? int.tryParse(ep?.id ?? '') ?? 1;
@@ -704,7 +766,8 @@ class StoryTvAdapter extends Adapter {
     for(final x in raw.whereType<Map>()) { if((x['index'] as num?)?.toInt()==number) {match=x;break;} }
     final url=match?['epsUrl']?.toString() ?? '';
     if(!isHttp(url)) throw ProviderError('Story TV stream URL not available for episode $number.');
-    return [Source.clean(name:'Auto · HLS',url:url,headers:_playerHeaders)];
+    final playableUrl = await _limitHlsTo1080(url);
+    return [Source.clean(name:'Auto · up to 1080p',url:playableUrl,headers:_playerHeaders)];
   }
 }
 
