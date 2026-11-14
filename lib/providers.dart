@@ -628,7 +628,7 @@ class StoryTvAdapter extends Adapter {
       subjectType:7, corner:'${show['numOfEpisodes'] ?? 0} Episodes');
   }
   @override Future<List<Shelf>> home(ProviderDef p) async {
-    final j=await _request('/feedservice/v2/explore/shows?page=0&size=40&intCount=0');
+    await _ensureHindi();\n    final j=await _request('/feedservice/v2/explore/shows?page=0&size=40&intCount=0');
     final data=j['data'] is Map ? j['data'] as Map : const {};
     final raw=data['content'] is List ? data['content'] as List : const [];
     final items=raw.whereType<Map>().map((x)=>_item(p,x)).where((x)=>x.id.isNotEmpty).toList();
@@ -658,7 +658,7 @@ class StoryTvAdapter extends Adapter {
     return out.take(8).toList();
   }
   @override Future<Item> detail(ProviderDef p,Item item) async {
-    final j=await _request('/feedservice/v1/episode/list/${Uri.encodeComponent(item.id)}',cache:true);
+    await _ensureHindi();\n    final j=await _request('/feedservice/v1/episode/list/${Uri.encodeComponent(item.id)}',cache:true);
     final d=j['data'] is Map ? j['data'] as Map : const {};
     final count=(d['epCount'] as num?)?.toInt() ?? 0;
     final raw=d['data'] is List ? d['data'] as List : const [];
@@ -674,7 +674,7 @@ class StoryTvAdapter extends Adapter {
       episodes:eps, plot:'$count episodes');
   }
   @override Future<List<Source>> sources(ProviderDef p,Item item,Episode? ep) async {
-    final number=ep?.episode ?? int.tryParse(ep?.id ?? '') ?? 1;
+    await _ensureHindi();\n    final number=ep?.episode ?? int.tryParse(ep?.id ?? '') ?? 1;
     final cursor=((number-1)~/5)*5;
     // Always request the current episode's batch afresh; signed CDN URLs are not reused.
     final j=await _request('/feedservice/v1/episode/metadata/${Uri.encodeComponent(item.id)}?cursor=$cursor&dir=NEXT');
