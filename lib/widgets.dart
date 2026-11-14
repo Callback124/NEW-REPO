@@ -190,7 +190,7 @@ class ShelfRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: shelf.items.length,
               itemExtent: w + 12,
-              cacheExtent: w * 12,
+              cacheExtent: w * 7,
               itemBuilder: (context, i) {
                 final it = shelf.items[i];
                 return Padding(
