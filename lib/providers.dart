@@ -723,7 +723,7 @@ class StoryTvAdapter extends Adapter {
     final data=j['data'] is Map ? j['data'] as Map : const {};
     final raw=data['content'] is List ? data['content'] as List : const [];
     final items=raw.whereType<Map>().where(_isHindiShow).map((m)=>_item(p,m)).where((x)=>x.id.isNotEmpty).toList();
-    return StoryTvPageResult(items, _moreFrom(data, page, size, raw));
+    return StoryTvPageResult(items, _moreFrom({...j as Map, ...data}, page, size, raw));
   }
 
   @override Future<List<Item>> search(ProviderDef p,String query) async =>
