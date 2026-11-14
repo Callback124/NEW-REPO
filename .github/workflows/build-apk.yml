@@ -38,7 +38,11 @@ jobs:
           import android.content.Intent
           import android.net.Uri
           import android.os.Environment
+          import android.os.Build
           import android.database.Cursor
+          import android.content.ContentValues
+          import android.provider.MediaStore
+          import java.io.File
           import io.flutter.embedding.android.FlutterActivity
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
@@ -73,6 +77,32 @@ jobs:
                                       val headers = call.argument<Map<String, String>>("headers") ?: emptyMap()
                                       headers.forEach { (key, value) -> request.addRequestHeader(key, value) }
                                       result.success(manager.enqueue(request))
+                                  }
+                                  "saveMergedToGallery" -> {
+                                      val sourcePath = call.argument<String>("path") ?: throw IllegalArgumentException("Missing merged file")
+                                      val fileName = (call.argument<String>("fileName") ?: "video.mp4").replace(Regex("[^A-Za-z0-9._-]"), "_")
+                                      val source = File(sourcePath)
+                                      if (!source.exists() || source.length() == 0L) throw IllegalStateException("Merged video file is missing")
+                                      val values = ContentValues().apply {
+                                          put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                                          put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                              put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Stratus")
+                                              put(MediaStore.MediaColumns.IS_PENDING, 1)
+                                          }
+                                      }
+                                      val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: throw IllegalStateException("Could not create Gallery video")
+                                      try {
+                                          contentResolver.openOutputStream(uri)?.use { output -> source.inputStream().use { input -> input.copyTo(output) } } ?: throw IllegalStateException("Could not write Gallery video")
+                                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                              val ready = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                                              contentResolver.update(uri, ready, null, null)
+                                          }
+                                          result.success(true)
+                                      } catch (e: Exception) {
+                                          contentResolver.delete(uri, null, null)
+                                          throw e
+                                      }
                                   }
                                   "queryAll" -> {
                                       val ids = call.argument<List<Number>>("ids") ?: emptyList()
