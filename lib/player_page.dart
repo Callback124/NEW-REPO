@@ -410,18 +410,34 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   int _sourceResolution(Source s) {
-    final namedQuality = RegExp(r'(\\d{3,4})\\s*p?', caseSensitive:false).firstMatch(s.name);
-    if (namedQuality != null) {
-      final namedValue = int.tryParse(namedQuality.group(1) ?? '') ?? 0;
-      if (namedValue >= 240 && namedValue <= 4320) return namedValue;
-    }
     final text = '${s.name} ${s.note ?? ''} ${s.url ?? ''}'.toLowerCase();
-    if (RegExp(r'\b(8k|4320)\b').hasMatch(text)) return 4320;
-    if (RegExp(r'\b(4k|2160|uhd)\b').hasMatch(text)) return 2160;
-    final matches = RegExp(r'\b(\d{3,4})\s*p?\b').allMatches(text);
+
+    // Story TV is portrait 9:16: 480x854 means 480p, not 854p.
+    // Use the shorter dimension for both portrait and landscape streams.
+    final dimensions = RegExp(r'(\\d{3,4})\\s*[x×]\\s*(\\d{3,4})')
+        .allMatches(text);
     var best = 0;
-    for (final m in matches) {
-      final value = int.tryParse(m.group(1) ?? '') ?? 0;
+    for (final match in dimensions) {
+      final width = int.tryParse(match.group(1) ?? '') ?? 0;
+      final height = int.tryParse(match.group(2) ?? '') ?? 0;
+      if (width > 0 && height > 0) {
+        final tier = width < height ? width : height;
+        if (tier >= 240 && tier <= 4320 && tier > best) best = tier;
+      }
+    }
+    if (best > 0) return best;
+
+    final namedQuality = RegExp(r'(\\d{3,4})\\s*p?', caseSensitive: false)
+        .firstMatch(s.name);
+    if (namedQuality != null) {
+      final value = int.tryParse(namedQuality.group(1) ?? '') ?? 0;
+      if (value >= 240 && value <= 4320) return value;
+    }
+    if (RegExp(r'\\b(8k|4320)\\b').hasMatch(text)) return 4320;
+    if (RegExp(r'\\b(4k|2160|uhd)\\b').hasMatch(text)) return 2160;
+    final matches = RegExp(r'\\b(\\d{3,4})\\s*p\\b').allMatches(text);
+    for (final match in matches) {
+      final value = int.tryParse(match.group(1) ?? '') ?? 0;
       if (value >= 240 && value <= 4320 && value > best) best = value;
     }
     return best;
