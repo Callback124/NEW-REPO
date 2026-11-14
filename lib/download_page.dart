@@ -91,7 +91,7 @@ class _DownloadPageState extends State<DownloadPage> {
 
   bool _isDirectFile(Source s) {
     final path = Uri.tryParse(s.url ?? '')?.path.toLowerCase() ?? '';
-    if (_item.pid == 'storytv' && path.endsWith('.m3u8')) return true;
+    if ((_item.pid == 'storytv' || _item.pid == 'freereels') && path.endsWith('.m3u8')) return true;
     if (path.endsWith('.m3u8') || path.endsWith('.mpd')) return false;
     return path.endsWith('.mp4') || s.name.toLowerCase().contains('mp4');
   }
@@ -137,10 +137,11 @@ class _DownloadPageState extends State<DownloadPage> {
 
   Future<List<Source>> _filesFor(Episode? ep) async {
     final sources = await getSources(_item, ep);
-    if (_item.pid == 'storytv') {
+    if (_item.pid == 'storytv' || _item.pid == 'freereels') {
       final masters = sources.where((s) => s.playable &&
         (Uri.tryParse(s.url!)?.path.toLowerCase().endsWith('.m3u8') ?? false));
-      return masters.isEmpty ? [] : _storyTvVariants(masters.first);
+      return masters.isEmpty ? sources.where((s) => s.playable && _isDirectFile(s)).toList()
+          : _storyTvVariants(masters.first);
     }
     final seen = <String>{};
     return sources.where((s) => s.playable && _isDirectFile(s) && seen.add(s.url!)).toList();
@@ -363,7 +364,7 @@ class _DownloadPageState extends State<DownloadPage> {
 
   Future<void> _startDownloads() async {
     final selected = <_DownloadChoice>[];
-    if (_item.pid == 'storytv' && _series) {
+    if ((_item.pid == 'storytv' || _item.pid == 'freereels') && _series) {
       final episodes = _downloadMode == 'all'
           ? _item.episodes
           : _item.episodes.where((e) => _selected.contains(e.id)).toList();
@@ -380,7 +381,7 @@ class _DownloadPageState extends State<DownloadPage> {
       selected.add(_visibleChoices.first);
     }
     if (selected.isEmpty) return;
-    if (_item.pid == 'storytv' && _series) {
+    if ((_item.pid == 'storytv' || _item.pid == 'freereels') && _series) {
       final taskId = await DownloadService.instance.createMergeTask(
         '${_item.title} · ${selected.length} episodes', selected.length);
       // Keep the merge alive after this route closes; the Downloads tab observes
