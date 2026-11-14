@@ -139,7 +139,7 @@ class JioSaavnPlayer {
     if (songs.isEmpty) return;
     queue..clear()..addAll(songs); index = start.clamp(0, queue.length - 1).toInt(); revision.value++; await playCurrent();
   }
-  Future<String> _resolve(SaavnSong song, String quality) async {
+  Future<String> resolveAudioUrl(SaavnSong song, String quality) async {
     var encrypted = song.encryptedUrl;
     if (encrypted.isEmpty) { final d = await api.songDetails(song.id); final more = d['more_info']; encrypted = (d['encrypted_media_url'] ?? (more is Map ? more['encrypted_media_url'] : null) ?? '').toString(); }
     if (encrypted.isEmpty) throw Exception('Audio URL not available');
@@ -155,7 +155,7 @@ class JioSaavnPlayer {
     final qualities = <String>[preferred, ...['320', '160', '96'].where((q) => q != preferred)];
     for (final quality in qualities) {
       try {
-        final url = await _resolve(song, quality);
+        final url = await resolveAudioUrl(song, quality);
         await audio.setUrl(url, headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36', 'Accept': '*/*'});
         bitrate = quality;
         await audio.play();
@@ -166,9 +166,10 @@ class JioSaavnPlayer {
     }
     throw Exception('Unable to play this JioSaavn track: $lastError');
   }
+  Future<void> stopAndClear() async { await audio.stop(); queue.clear(); index = -1; revision.value++; }
   Future<void> next() async { if (queue.isEmpty) return; index = (index + 1) % queue.length; revision.value++; await playCurrent(); }
   Future<void> previous() async { if (queue.isEmpty) return; if (audio.position > const Duration(seconds: 3)) { await audio.seek(Duration.zero); return; } index = (index - 1 + queue.length) % queue.length; revision.value++; await playCurrent(); }
   Future<void> setQuality(String value) async {
-    bitrate = value; if (current != null) { final wasPlaying = audio.playing; final pos = audio.position; await audio.pause(); final url = await _resolve(current!, value); await audio.setUrl(url); await audio.seek(pos); if (wasPlaying) await audio.play(); }
+    bitrate = value; if (current != null) { final wasPlaying = audio.playing; final pos = audio.position; await audio.pause(); final url = await resolveAudioUrl(current!, value); await audio.setUrl(url); await audio.seek(pos); if (wasPlaying) await audio.play(); }
   }
 }
