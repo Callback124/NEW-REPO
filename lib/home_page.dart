@@ -290,7 +290,7 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
   void initState() {
     super.initState();
     widget.scrollController.addListener(_onScroll);
-    _hasMore = widget.items.length >= 40;
+    _hasMore = StoryTvAdapter.homeHasMore(widget.provider.id);
     WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
   }
 
