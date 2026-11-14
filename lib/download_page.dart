@@ -59,11 +59,19 @@ class _DownloadPageState extends State<DownloadPage> {
   }
 
   String _qualityName(Source s) {
-    final text = '${s.name} ${s.note ?? ''} ${s.url ?? ''}';
-    final match = RegExp(r'(2160p|1440p|1080p|720p|540p|480p|360p|4320p|4K|2K|UHD)', caseSensitive: false).firstMatch(text);
+    final uri = Uri.tryParse(s.url ?? '');
+    final text = '${s.name} ${s.note ?? ''} ${uri?.path ?? ''} ${uri?.query ?? ''}';
+    final match = RegExp(
+      r'(4320|2160|1440|1080|900|720|540|480|360)\s*p?|4k|2k|uhd|fhd|hd',
+      caseSensitive: false,
+    ).firstMatch(text);
     if (match == null) return 'Original';
-    final value = match.group(0)!.toUpperCase();
-    return value == 'UHD' ? '4K' : value;
+    final value = match.group(0)!.toUpperCase().replaceAll(' ', '');
+    if (value == 'UHD' || value == '4K') return '4K';
+    if (value == '2K') return '2K';
+    if (value == 'FHD') return '1080p';
+    if (value == 'HD') return '720p';
+    return value.endsWith('P') ? value : '${value}p';
   }
 
   int _qualityRank(String q) {
