@@ -79,6 +79,12 @@ class _ShellState extends State<Shell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    DownloadService.instance.onOpenDownloads = () { if (mounted) setState(() => _i = 2); };
+  }
+
+  @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final body = IndexedStack(index: _i, children: _pages);
