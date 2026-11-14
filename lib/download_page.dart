@@ -70,7 +70,10 @@ class _DownloadPageState extends State<DownloadPage> {
       r'(4320|2160|1440|1080|900|720|540|480|360)\s*p?|4k|2k|uhd|fhd|hd',
       caseSensitive: false,
     ).firstMatch(text);
-    if (match == null) return 'Original';
+    if (match == null) {
+      if (text.toLowerCase().contains('auto')) return 'Auto';
+      return 'Original';
+    }
     final value = match.group(0)!.toUpperCase().replaceAll(' ', '');
     if (value == 'UHD' || value == '4K') return '4K';
     if (value == '2K') return '2K';
@@ -122,6 +125,13 @@ class _DownloadPageState extends State<DownloadPage> {
     final seen = <String>{};
     final variants = result.where((s) => seen.add(s.url!)).toList()
       ..sort((a, b) => _qualityRank(b.name).compareTo(_qualityRank(a.name)));
+    // Some Story TV episodes expose a media playlist (or a master playlist
+    // without RESOLUTION metadata) instead of an EXT-X-STREAM-INF list.
+    // It is still a valid HLS download source and FFmpeg can read it directly.
+    if (variants.isEmpty) {
+      return [Source.clean(name: 'Auto · adaptive quality',
+        url: master.url!, headers: master.headers)];
+    }
     return variants;
   }
 
@@ -297,13 +307,19 @@ class _DownloadPageState extends State<DownloadPage> {
               orElse: () => variants.isNotEmpty ? variants.first : throw Exception('No downloadable quality found.'));
             final episodeFile = '${work.path}/episode_${i.toString().padLeft(4, '0')}.mp4';
             final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join();
-            final session = await FFmpegKit.executeWithArguments([
+            final samePlaylist = source.url == master.url;
+            final ffmpegArgs = <String>[
               '-y',
               '-headers', headers, '-i', master.url!,
-              '-headers', headers, '-i', source.url!,
-              '-map', '1:v:0', '-map', '0:a:0?', '-c', 'copy',
-              '-bsf:a', 'aac_adtstoasc', episodeFile,
-            ]);
+              if (!samePlaylist) ...[
+                '-headers', headers, '-i', source.url!,
+                '-map', '1:v:0', '-map', '0:a:0?',
+              ] else ...[
+                '-map', '0:v:0', '-map', '0:a:0?',
+              ],
+              '-c', 'copy', '-bsf:a', 'aac_adtstoasc', episodeFile,
+            ];
+            final session = await FFmpegKit.executeWithArguments(ffmpegArgs);
             final code = await session.getReturnCode();
             if (!ReturnCode.isSuccess(code)) {
               final logs = await session.getOutput();
