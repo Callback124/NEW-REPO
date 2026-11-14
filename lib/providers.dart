@@ -631,7 +631,7 @@ class StoryTvAdapter extends Adapter {
     final j=await _request('/feedservice/v2/explore/shows?page=0&size=40&intCount=0');
     final data=j['data'] is Map ? j['data'] as Map : const {};
     final raw=data['content'] is List ? data['content'] as List : const [];
-    final items=raw.whereType<Map>().map(_item.bind(p)).where((x)=>x.id.isNotEmpty).toList();
+    final items=raw.whereType<Map>().map((x)=>_item(p,x)).where((x)=>x.id.isNotEmpty).toList();
     if(items.isEmpty) throw ProviderError('Story TV returned no Hindi dramas.');
     return [Shelf('Hindi Mini Dramas',items)];
   }
@@ -670,7 +670,7 @@ class StoryTvAdapter extends Adapter {
         title:(x?['epTitle'] ?? 'Episode $n').toString()));
     }
     return item.copyWith(title:d['showTitle']?.toString() ?? item.title,
-      genres:[(d['genre'] ?? item.genres.firstOrNull ?? 'Drama').toString()],
+      genres:[(d['genre'] ?? (item.genres.isNotEmpty ? item.genres.first : 'Drama')).toString()],
       episodes:eps, plot:'$count episodes');
   }
   @override Future<List<Source>> sources(ProviderDef p,Item item,Episode? ep) async {
