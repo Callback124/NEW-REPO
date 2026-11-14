@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:ffmpeg_kit_flutter_new_https/ffmpeg_kit.dart';
 import 'package:http/http.dart' as http;
 
 import 'downloads_service.dart';
@@ -83,6 +86,7 @@ class _DownloadPageState extends State<DownloadPage> {
 
   bool _isDirectFile(Source s) {
     final path = Uri.tryParse(s.url ?? '')?.path.toLowerCase() ?? '';
+    if (_item.pid == 'storytv' && path.endsWith('.m3u8')) return true;
     if (path.endsWith('.m3u8') || path.endsWith('.mpd')) return false;
     return path.endsWith('.mp4') || s.name.toLowerCase().contains('mp4');
   }
@@ -134,6 +138,8 @@ class _DownloadPageState extends State<DownloadPage> {
   }
 
   Future<int> _getSize(Source source) async {
+    final path = Uri.tryParse(source.url ?? '')?.path.toLowerCase() ?? '';
+    if (path.endsWith('.m3u8') || path.endsWith('.mpd')) return -1;
     try {
       final response = await http.head(Uri.parse(source.url!), headers: source.headers)
           .timeout(const Duration(seconds: 10));
@@ -216,6 +222,65 @@ class _DownloadPageState extends State<DownloadPage> {
     });
   }
 
+
+  Future<void> _mergeStoryTvEpisodes(List<_DownloadChoice> selected) async {
+    if (selected.isEmpty) return;
+    final sorted = [...selected]..sort((a, b) =>
+      a.episode!.episode.compareTo(b.episode!.episode));
+    final tempRoot = await getTemporaryDirectory();
+    final work = Directory('${tempRoot.path}/storytv_${DateTime.now().microsecondsSinceEpoch}');
+    await work.create(recursive: true);
+    final outputDir = await getApplicationDocumentsDirectory();
+    final fileName = '${_safe(_item.title)}_E${sorted.first.episode!.episode.toString().padLeft(3, '0')}-E${sorted.last.episode!.episode.toString().padLeft(3, '0')}.mp4';
+    final output = '${outputDir.path}/$fileName';
+    final concat = File('${work.path}/concat.txt');
+    try {
+      final paths = <String>[];
+      for (var i = 0; i < sorted.length; i++) {
+        if (!mounted) throw Exception('Download cancelled.');
+        final choice = sorted[i];
+        final sources = await getSources(_item, choice.episode);
+        final source = sources.firstWhere(
+          (x) => x.playable && (Uri.tryParse(x.url ?? '')?.path.toLowerCase().endsWith('.m3u8') ?? false),
+          orElse: () => throw Exception('Episode ${choice.episode!.episode} stream is no longer available.'),
+        );
+        final episodeFile = '${work.path}/episode_${i.toString().padLeft(4, '0')}.mp4';
+        final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join();
+        final session = await FFmpegKit.executeWithArguments([
+          '-y', '-headers', headers, '-i', source.url!,
+          '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy',
+          '-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart', episodeFile,
+        ]);
+        final code = await session.getReturnCode();
+        if (!ReturnCode.isSuccess(code)) {
+          final logs = await session.getOutput();
+          throw Exception('Episode ${choice.episode!.episode} conversion failed. ${(logs ?? '').split('\n').reversed.take(5).toList().reversed.join(' ')}');
+        }
+        if (!await File(episodeFile).exists() || await File(episodeFile).length() == 0) {
+          throw Exception('Episode ${choice.episode!.episode} produced an empty video.');
+        }
+        paths.add(episodeFile);
+        if (mounted) setState(() => _scanned = i + 1);
+      }
+      await concat.writeAsString(paths.map((p) => "file '${p.replaceAll("'", "'\\''")}'\n").join());
+      final merge = await FFmpegKit.executeWithArguments([
+        '-y', '-f', 'concat', '-safe', '0', '-i', concat.path,
+        '-c', 'copy', '-movflags', '+faststart', output,
+      ]);
+      final mergeCode = await merge.getReturnCode();
+      if (!ReturnCode.isSuccess(mergeCode)) {
+        throw Exception('Episodes could not be merged into one MP4. ${await merge.getOutput() ?? ''}');
+      }
+      await DownloadService.instance.addMergedFile(
+        title: '${_item.title} · ${sorted.length} episodes',
+        fileName: fileName,
+        localPath: output,
+      );
+    } finally {
+      if (await work.exists()) await work.delete(recursive: true);
+    }
+  }
+
   Future<void> _startDownloads() async {
     final selected = <_DownloadChoice>[];
     if (_series) {
@@ -230,7 +295,9 @@ class _DownloadPageState extends State<DownloadPage> {
     if (selected.isEmpty) return;
     setState(() => _queueing = true);
     try {
-      for (final c in selected) {
+      if (_item.pid == 'storytv' && _series) {
+        await _mergeStoryTvEpisodes(selected);
+      } else for (final c in selected) {
         final epLabel = c.episode == null ? '' : '_S${c.episode!.season.toString().padLeft(2, '0')}E${c.episode!.episode.toString().padLeft(2, '0')}';
         final file = '${_safe(_item.title)}${epLabel}_${_safe(c.quality)}.mp4';
         await DownloadService.instance.enqueue(
@@ -242,7 +309,7 @@ class _DownloadPageState extends State<DownloadPage> {
       }
       if (mounted) {
         setState(() { _queueing = false; _selected.clear(); });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${selected.length} download(s) added to queue')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_item.pid == 'storytv' && _series ? 'Merged video added to Downloads' : '${selected.length} download(s) added to queue')));
       }
     } catch (e) {
       if (mounted) setState(() => _queueing = false);
