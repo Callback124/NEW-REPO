@@ -37,12 +37,13 @@ class _DownloadPageState extends State<DownloadPage> {
   List<_DownloadChoice> _choices = [];
   final Set<String> _selected = {};
   bool _queueing = false;
+  String _downloadMode = 'all';
 
   bool get _series => _item.episodes.isNotEmpty || _item.type == 'series' || _item.subjectType == 2;
   List<int> get _seasons => (_item.episodes.map((e) => e.season).toSet().toList()..sort());
   List<Episode> get _seasonEpisodes => _item.episodes.where((e) => e.season == _season).toList()
     ..sort((a, b) => a.episode.compareTo(b.episode));
-  List<Episode> get _pageEpisodes => _seasonEpisodes.skip(_rangeStart).take(100).toList();
+  List<Episode> get _pageEpisodes => _item.pid == 'storytv' ? _item.episodes : _seasonEpisodes.skip(_rangeStart).take(100).toList();
   List<String> get _qualities {
     final values = _choices.map((e) => e.quality).toSet().toList();
     values.sort((a, b) => _qualityRank(b).compareTo(_qualityRank(a)));
@@ -51,8 +52,8 @@ class _DownloadPageState extends State<DownloadPage> {
   List<_DownloadChoice> get _visibleChoices => _choices.where((e) {
     final ep = e.episode;
     return e.quality == _quality &&
-        (!_series || (ep != null && ep.season == _season &&
-          ep.episode > _rangeStart && ep.episode <= _rangeStart + 100));
+        (!_series || (ep != null && (_item.pid == 'storytv' || (ep.season == _season &&
+          ep.episode > _rangeStart && ep.episode <= _rangeStart + 100))));
   }).toList();
 
   @override
@@ -263,8 +264,7 @@ class _DownloadPageState extends State<DownloadPage> {
 
   Future<void> _mergeStoryTvEpisodes(List<_DownloadChoice> selected) async {
     if (selected.isEmpty) return;
-    final sorted = [...selected]..sort((a, b) =>
-      a.episode!.episode.compareTo(b.episode!.episode));
+    final sorted = [...selected]..sort((a, b) => a.episode!.season != b.episode!.season ? a.episode!.season.compareTo(b.episode!.season) : a.episode!.episode.compareTo(b.episode!.episode));
     final tempRoot = await getTemporaryDirectory();
     final work = Directory('${tempRoot.path}/storytv_${DateTime.now().microsecondsSinceEpoch}');
     await work.create(recursive: true);
@@ -278,15 +278,18 @@ class _DownloadPageState extends State<DownloadPage> {
         if (!mounted) throw Exception('Download cancelled.');
         final choice = sorted[i];
         final sources = await getSources(_item, choice.episode);
-        final source = sources.firstWhere(
+        final master = sources.firstWhere(
           (x) => x.playable && (Uri.tryParse(x.url ?? '')?.path.toLowerCase().endsWith('.m3u8') ?? false),
           orElse: () => throw Exception('Episode ${choice.episode!.episode} stream is no longer available.'),
         );
+        final variants = await _storyTvVariants(master);
+        final source = variants.firstWhere((x) => x.name == choice.quality,
+          orElse: () => variants.isNotEmpty ? variants.first : throw Exception('No downloadable quality found.'));
         final episodeFile = '${work.path}/episode_${i.toString().padLeft(4, '0')}.mp4';
         final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join();
         final session = await FFmpegKit.executeWithArguments([
-          '-y', '-headers', headers, '-i', source.url!,
-          '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy',
+          '-y', '-headers', headers, '-i', master.url!, '-i', source.url!,
+          '-map', '1:v:0', '-map', '0:a:0?', '-c', 'copy',
           '-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart', episodeFile,
         ]);
         final code = await session.getReturnCode();
@@ -324,29 +327,38 @@ class _DownloadPageState extends State<DownloadPage> {
 
   Future<void> _startDownloads() async {
     final selected = <_DownloadChoice>[];
-    if (_series) {
+    if (_item.pid == 'storytv' && _series) {
+      final episodes = _downloadMode == 'all'
+          ? _item.episodes
+          : _item.episodes.where((e) => _selected.contains(e.id)).toList();
+      if (episodes.isEmpty) return;
+      final template = _choices.firstWhere((e) => e.quality == _quality);
+      selected.addAll(episodes.map((e) => _DownloadChoice(e, template.source, _quality ?? template.quality, -1)));
+    } else if (_series) {
       final unique = <String, _DownloadChoice>{};
       for (final choice in _visibleChoices) {
         if (_selected.contains(_choiceKey(choice))) unique.putIfAbsent(_choiceKey(choice), () => choice);
       }
       selected.addAll(unique.values);
-    } else {
-      if (_visibleChoices.isNotEmpty) selected.add(_visibleChoices.first);
+    } else if (_visibleChoices.isNotEmpty) {
+      selected.add(_visibleChoices.first);
     }
     if (selected.isEmpty) return;
     setState(() => _queueing = true);
     try {
       if (_item.pid == 'storytv' && _series) {
         await _mergeStoryTvEpisodes(selected);
-      } else for (final c in selected) {
-        final epLabel = c.episode == null ? '' : '_S${c.episode!.season.toString().padLeft(2, '0')}E${c.episode!.episode.toString().padLeft(2, '0')}';
-        final file = '${_safe(_item.title)}${epLabel}_${_safe(c.quality)}.mp4';
-        await DownloadService.instance.enqueue(
-          url: c.source.url!,
-          title: '${_item.title}${c.episode == null ? '' : ' · ${c.episode!.label}'} · ${c.quality}',
-          fileName: file,
-          headers: c.source.headers,
-        );
+      } else {
+        for (final c in selected) {
+          final epLabel = c.episode == null ? '' : '_S${c.episode!.season.toString().padLeft(2, '0')}E${c.episode!.episode.toString().padLeft(2, '0')}';
+          final file = '${_safe(_item.title)}${epLabel}_${_safe(c.quality)}.mp4';
+          await DownloadService.instance.enqueue(
+            url: c.source.url!,
+            title: '${_item.title}${c.episode == null ? '' : ' · ${c.episode!.label}'} · ${c.quality}',
+            fileName: file,
+            headers: c.source.headers,
+          );
+        }
       }
       if (mounted) {
         setState(() { _queueing = false; _selected.clear(); });
@@ -391,15 +403,6 @@ class _DownloadPageState extends State<DownloadPage> {
               selected: s == _season, onSelected: _loading ? null : (_) => _changeSeason(s),
             ),
           )]),
-        if (_series && _seasonEpisodes.length > 100)
-          _tabs([for (var start = 0; start < _seasonEpisodes.length; start += 100) Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              showCheckmark: false,
-              label: Text('${(start + 1).toString().padLeft(3, '0')}-${(start + 100 < _seasonEpisodes.length ? start + 100 : _seasonEpisodes.length).toString().padLeft(3, '0')}'),
-              selected: _rangeStart == start, onSelected: _loading ? null : (_) => _changeRange(start),
-            ),
-          )]),
         if (_qualities.isNotEmpty)
           _tabs([for (final q in _qualities) Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -433,56 +436,128 @@ class _DownloadPageState extends State<DownloadPage> {
                 trailing: const Icon(Icons.download_outlined),
               ),
           ])),
-        if (!_loading && _error == null && _series)
-          Expanded(child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            itemCount: episodes.length,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 100, mainAxisSpacing: 8, crossAxisSpacing: 8,
-              childAspectRatio: .95,
-            ),
-            itemBuilder: (context, i) {
-              final ep = episodes[i];
-              final matching = choices.where((c) => c.episode?.id == ep.id).toList();
-              final match = matching.isEmpty ? null : matching.first;
-              final available = match != null;
-              final selected = _selected.contains(ep.id);
-              return Card(
-                margin: EdgeInsets.zero,
-                clipBehavior: Clip.antiAlias,
-                color: selected ? cs.primaryContainer : null,
-                child: InkWell(
-                  onTap: !available ? null : () => setState(() {
-                    if (selected) { _selected.remove(ep.id); } else { _selected.add(ep.id); }
-                  }),
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text('E${ep.episode.toString().padLeft(2, '0')}', style: TextStyle(fontWeight: FontWeight.w800, color: available ? cs.onSurface : cs.onSurface.withOpacity(.35))),
-                    const SizedBox(height: 5),
-                    Text(available ? _sizeLabel(match!.size) : 'Unavailable',
-                      style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
-                    if (selected) Icon(Icons.check_circle, size: 15, color: cs.primary),
-                  ]),
+        if (!_loading && _error == null && _series && _item.pid == 'storytv')
+          Expanded(child: _downloadMode == 'all'
+            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.video_library_outlined, size: 42),
+                const SizedBox(height: 10),
+                Text('All episodes · ${_item.episodes.length} episodes'),
+                const SizedBox(height: 4),
+                const Text('Will be merged into one video', style: TextStyle(fontSize: 12)),
+              ]))
+            : GridView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                itemCount: episodes.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5, mainAxisSpacing: 9, crossAxisSpacing: 9,
+                  childAspectRatio: 1.12,
                 ),
-              );
-            },
-          )),
+                itemBuilder: (context, i) {
+                  final ep = episodes[i];
+                  final available = choices.any((x) => x.episode?.id == ep.id);
+                  final selected = _selected.contains(ep.id);
+                  return Card(
+                    margin: EdgeInsets.zero,
+                    color: selected ? cs.primaryContainer : null,
+                    child: InkWell(
+                      onTap: !available ? null : () => setState(() {
+                        if (selected) { _selected.remove(ep.id); } else { _selected.add(ep.id); }
+                      }),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text(ep.episode.toString().padLeft(3, '0'),
+                          style: TextStyle(fontWeight: FontWeight.w800,
+                            color: available ? cs.onSurface : cs.onSurface.withOpacity(.35))),
+                        const SizedBox(height: 3),
+                        Text(selected ? 'Selected' : (available ? 'Episode' : 'Unavailable'),
+                          style: const TextStyle(fontSize: 10)),
+                      ]),
+                    ),
+                  );
+                },
+              )),
+        if (!_loading && _error == null && _series && _item.pid != 'storytv')
+          Expanded(child: ListView(children: [
+            for (final ep in episodes)
+              CheckboxListTile(
+                value: _selected.contains(ep.id), title: Text(ep.label),
+                onChanged: (v) => setState(() { if (v == true) { _selected.add(ep.id); } else { _selected.remove(ep.id); } }),
+              ),
+          ])),
       ]),
       bottomNavigationBar: _loading || _error != null ? null : SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Row(children: [
-            if (_series) ...[
-              TextButton(onPressed: () => _selectAll(!allSelected), child: Text(allSelected ? 'Deselect all' : 'Select all')),
-              const SizedBox(width: 8),
-              Text('${_selected.length} selected', style: Theme.of(context).textTheme.bodySmall),
-              const Spacer(),
-            ] else
-              const Spacer(),
-            FilledButton.icon(
-              onPressed: _queueing || (_series && _selected.isEmpty) ? null : _startDownloads,
-              icon: _queueing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download, size: 18),
-              label: Text(_queueing ? 'Adding…' : 'Download'),
-            ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (_series && _item.pid == 'storytv')
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: _queueing ? null : () => setState(() { _downloadMode = 'all'; _selected.clear(); }),
+                  style: OutlinedButton.styleFrom(backgroundColor: _downloadMode == 'all' ? cs.primaryContainer : null),
+                  child: const Text('All in One Download'),
+                )),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton(
+                  onPressed: _queueing ? null : () => setState(() => _downloadMode = 'custom'),
+                  style: OutlinedButton.styleFrom(backgroundColor: _downloadMode == 'custom' ? cs.primaryContainer : null),
+                  child: const Text('Custom Download'),
+                )),
+              ]),
+            if (_series && _item.pid == 'storytv' && _downloadMode == 'custom')
+              Row(children: [
+                TextButton(onPressed: () => setState(() => _selected.addAll(episodes
+                  .where((e) => choices.any((x) => x.episode?.id == e.id)).map((e) => e.id)),
+                  child: const Text('Select All')),
+                Text('${_selected.length} selected'),
+                const Spacer(),
+                TextButton(onPressed: () async {
+                  final controller = TextEditingController();
+                  final value = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+                    title: const Text('Custom episode range'),
+                    content: TextField(controller: controller, autofocus: true,
+                      decoration: const InputDecoration(hintText: '1-8,10,12-19')),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                      FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Apply')),
+                    ],
+                  ));
+                  if (value == null) return;
+                  try {
+                    final nums = <int>{};
+                    for (final part in value.split(',')) {
+                      final bits = part.trim().split('-');
+                      if (bits.length == 1) { nums.add(int.parse(bits[0])); }
+                      else if (bits.length == 2) {
+                        final a = int.parse(bits[0]); final b = int.parse(bits[1]);
+                        if (a <= 0 || b < a || b - a > 5000) throw FormatException();
+                        nums.addAll(List.generate(b - a + 1, (i) => a + i));
+                      } else { throw FormatException(); }
+                    }
+                    setState(() {
+                      _selected
+                        ..clear()
+                        ..addAll(_item.episodes.where((e) => nums.contains(e.episode) &&
+                          choices.any((x) => x.episode?.id == e.id)).map((e) => e.id));
+                    });
+                  } catch (_) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Invalid range. Example: 1-8,10,12-19')));
+                  }
+                }, child: const Text('Custom Range')),
+              ]),
+            Row(children: [
+              if (!_series) const Spacer(),
+              if (_series && _item.pid != 'storytv') ...[
+                TextButton(onPressed: () => _selectAll(!allSelected), child: Text(allSelected ? 'Deselect all' : 'Select all')),
+                Text('${_selected.length} selected'), const Spacer(),
+              ],
+              if (_series && _item.pid == 'storytv' && _downloadMode == 'custom') const Spacer(),
+              FilledButton.icon(
+                onPressed: _queueing || (_series && _item.pid == 'storytv' && _downloadMode == 'custom' && _selected.isEmpty)
+                  || (_series && _item.pid != 'storytv' && _selected.isEmpty) ? null : _startDownloads,
+                icon: _queueing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download, size: 18),
+                label: Text(_queueing ? 'Merging…' : 'Download'),
+              ),
+            ]),
           ]),
         ),
       ),
