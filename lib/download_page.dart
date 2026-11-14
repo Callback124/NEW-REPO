@@ -288,7 +288,12 @@ class _DownloadPageState extends State<DownloadPage> {
         final episodeFile = '${work.path}/episode_${i.toString().padLeft(4, '0')}.mp4';
         final headers = source.headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join();
         final session = await FFmpegKit.executeWithArguments([
-          '-y', '-headers', headers, '-i', master.url!, '-i', source.url!,
+          // FFmpeg input options apply only to the next input. Story TV CDN
+          // requires the same Referer/Origin/User-Agent on BOTH the master
+          // playlist (audio rendition) and the selected quality playlist.
+          '-y',
+          '-headers', headers, '-i', master.url!,
+          '-headers', headers, '-i', source.url!,
           '-map', '1:v:0', '-map', '0:a:0?', '-c', 'copy',
           '-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart', episodeFile,
         ]);
