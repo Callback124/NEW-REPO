@@ -101,7 +101,9 @@ class _SearchPageState extends State<SearchPage> with AutomaticKeepAliveClientMi
     try {
       final activeProviders = app.scope();
 final active = activeProviders.isEmpty ? null : activeProviders.first;
-final values = active?.kind == 'storytv'\n          ? await StoryTvAdapter().suggestions(q)\n          : await MovieBoxAdapter().suggestions(q);
+final values = active?.kind == 'storytv'
+          ? await StoryTvAdapter().suggestions(q)
+          : await MovieBoxAdapter().suggestions(q);
       if (!mounted || _ctrl.text.trim() != q) return;
       setState(() => _suggestions = values.take(8).toList());
       _saveSession();
