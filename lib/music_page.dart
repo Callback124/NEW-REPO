@@ -4,6 +4,16 @@ import 'jiosaavn_service.dart';
 
 const _musicAccent = Color(0xFF38DAD5);
 
+Future<void> _playSaavnAndOpen(BuildContext context, List<SaavnSong> songs, {int start = 0}) async {
+  if (songs.isEmpty) return;
+  try {
+    await JioSaavnPlayer.instance.playList(songs, start: start);
+    if (context.mounted) await Navigator.push(context, MaterialPageRoute(builder: (_) => const SaavnFullPlayer()));
+  } catch (e) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Playback failed: $e')));
+  }
+}
+
 class MusicPage extends StatefulWidget {
   const MusicPage({super.key});
   @override
@@ -117,8 +127,8 @@ class _SaavnTracklistSheetState extends State<SaavnTracklistSheet>{
   @override void initState(){super.initState();final id=(widget.item[widget.playlist?'listid':'albumid']??widget.item['id']??'').toString();future=JioSaavnPlayer.instance.api.albumSongs(id,playlist:widget.playlist);}
   @override Widget build(BuildContext context)=>SafeArea(child:SizedBox(height:MediaQuery.sizeOf(context).height*.82,child:FutureBuilder<List<SaavnSong>>(future:future,builder:(context,snap){final rows=snap.data??[];return Column(children:[
     Padding(padding:const EdgeInsets.all(16),child:Row(children:[ClipRRect(borderRadius:BorderRadius.circular(10),child:Image.network((widget.item['image']??'').toString().replaceAll('150x150','500x500'),width:82,height:82,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const Icon(Icons.album,size:60))),const SizedBox(width:14),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(saavnClean(widget.item['title']??widget.item['name']??'Music collection'),style:Theme.of(context).textTheme.titleLarge),Text(rows.length.toString()+' songs')]))])),
-    Row(children:[const SizedBox(width:16),FilledButton.icon(onPressed:rows.isEmpty?null:()=>JioSaavnPlayer.instance.playList(rows),icon:const Icon(Icons.play_arrow),label:const Text('Play all')),const SizedBox(width:8),OutlinedButton.icon(onPressed:rows.isEmpty?null:(){final shuffled=[...rows]..shuffle();JioSaavnPlayer.instance.playList(shuffled);},icon:const Icon(Icons.shuffle),label:const Text('Shuffle'))]),
-    if(snap.connectionState==ConnectionState.waiting)const Expanded(child:Center(child:CircularProgressIndicator()))else if(snap.hasError)Expanded(child:Center(child:Text('Tracklist failed: '+snap.error.toString())))else Expanded(child:ListView.builder(itemCount:rows.length,itemBuilder:(context,i)=>ListTile(leading:Text((i+1).toString()),title:Text(rows[i].title),subtitle:Text(rows[i].artist),onTap:()=>JioSaavnPlayer.instance.playList(rows,start:i),trailing:const Icon(Icons.more_vert)))),
+    Row(children:[const SizedBox(width:16),FilledButton.icon(onPressed:rows.isEmpty?null:()=>_playSaavnAndOpen(context,rows),icon:const Icon(Icons.play_arrow),label:const Text('Play all')),const SizedBox(width:8),OutlinedButton.icon(onPressed:rows.isEmpty?null:(){final shuffled=[...rows]..shuffle();_playSaavnAndOpen(context,shuffled);},icon:const Icon(Icons.shuffle),label:const Text('Shuffle'))]),
+    if(snap.connectionState==ConnectionState.waiting)const Expanded(child:Center(child:CircularProgressIndicator()))else if(snap.hasError)Expanded(child:Center(child:Text('Tracklist failed: '+snap.error.toString())))else Expanded(child:ListView.builder(itemCount:rows.length,itemBuilder:(context,i)=>ListTile(leading:Text((i+1).toString()),title:Text(rows[i].title),subtitle:Text(rows[i].artist),onTap:()=>_playSaavnAndOpen(context,rows,start:i),trailing:const Icon(Icons.more_vert)))),
   ]);})));
 }
 class SaavnArtistPage extends StatefulWidget{
@@ -132,9 +142,9 @@ class _SaavnArtistPageState extends State<SaavnArtistPage>{
     if(snap.connectionState==ConnectionState.waiting)return const Center(child:CircularProgressIndicator());if(snap.hasError)return Center(child:Text(snap.error.toString()));
     final d=snap.data is Map?snap.data as Map:{};final t=d['topSongs'];final raw=t is Map?t['songs']:t;final songs=raw is List?raw.whereType<Map>().map((e)=>SaavnSong.fromJson(e)).toList():<SaavnSong>[];final a=d['topAlbums'];final albums=a is Map?a['albums']:a;
     return ListView(children:[
-      Padding(padding:const EdgeInsets.all(22),child:Column(children:[CircleAvatar(radius:58,backgroundImage:NetworkImage((widget.item['image']??'').toString().replaceAll('150x150','500x500'))),const SizedBox(height:12),Text(saavnClean(widget.item['name']??widget.item['title']),style:Theme.of(context).textTheme.headlineSmall),Text((widget.item['follower_count']??widget.item['fan_count']??'').toString()+' Fans'),FilledButton.icon(onPressed:songs.isEmpty?null:()=>JioSaavnPlayer.instance.playList(songs),icon:const Icon(Icons.play_arrow),label:const Text('Play all'))])),
+      Padding(padding:const EdgeInsets.all(22),child:Column(children:[CircleAvatar(radius:58,backgroundImage:NetworkImage((widget.item['image']??'').toString().replaceAll('150x150','500x500'))),const SizedBox(height:12),Text(saavnClean(widget.item['name']??widget.item['title']),style:Theme.of(context).textTheme.headlineSmall),Text((widget.item['follower_count']??widget.item['fan_count']??'').toString()+' Fans'),FilledButton.icon(onPressed:songs.isEmpty?null:()=>_playSaavnAndOpen(context,songs),icon:const Icon(Icons.play_arrow),label:const Text('Play all'))])),
       const Padding(padding:EdgeInsets.all(16),child:Text('Top Songs',style:TextStyle(fontWeight:FontWeight.bold,fontSize:19))),
-      for(final s in songs)ListTile(title:Text(s.title),subtitle:Text(s.artist),onTap:()=>JioSaavnPlayer.instance.playList(songs,start:songs.indexOf(s))),
+      for(final s in songs)ListTile(title:Text(s.title),subtitle:Text(s.artist),onTap:()=>_playSaavnAndOpen(context,songs,start:songs.indexOf(s))),
       const Padding(padding:EdgeInsets.all(16),child:Text('Top Albums',style:TextStyle(fontWeight:FontWeight.bold,fontSize:19))),
       if(albums is List)for(final item in albums.whereType<Map>())ListTile(title:Text(saavnClean(item['title']??item['name'])),subtitle:const Text('Album'),onTap:()=>showModalBottomSheet<void>(context:context,isScrollControlled:true,showDragHandle:true,builder:(_)=>SaavnTracklistSheet(item:Map<String,dynamic>.from(item),playlist:false))),
     ]);
