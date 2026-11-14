@@ -44,6 +44,20 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _transitioning = false;
   bool _locked = false;
 
+  Offset? _gestureStart;
+  Duration _gestureStartPosition = Duration.zero;
+  double _gestureStartValue = 0.5;
+  String? _gestureMode;
+  Duration? _seekPreview;
+  double _seekDeltaSeconds = 0;
+  double _indicatorValue = 0;
+  String? _indicatorLabel;
+  IconData? _indicatorIcon;
+  Timer? _gestureIndicatorTimer;
+  static const MethodChannel _playerChannel = MethodChannel('app.stratus/player');
+  bool get _isLandscape =>
+      MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
+
   bool _visible = true;
   Timer? _hideTimer;
   double _rate = 1.0;
@@ -489,6 +503,142 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
+  void _showGestureIndicator(IconData icon, String label, double value) {
+    if (!mounted) return;
+    _gestureIndicatorTimer?.cancel();
+    setState(() {
+      _indicatorIcon = icon;
+      _indicatorLabel = label;
+      _indicatorValue = value.clamp(0, 1);
+    });
+    _gestureIndicatorTimer = Timer(const Duration(milliseconds: 850), () {
+      if (mounted) setState(() {
+        _indicatorIcon = null;
+        _indicatorLabel = null;
+      });
+    });
+  }
+
+  String _previewTime(Duration duration) {
+    final seconds = duration.inSeconds.abs();
+    final sign = duration.isNegative ? '-' : '+';
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final sec = seconds % 60;
+    final value = h > 0
+        ? '${h}:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}'
+        : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+    return '$sign$value';
+  }
+
+  void _onGestureDoubleTapDown(TapDownDetails details) {
+    _gestureStart = details.localPosition;
+  }
+
+  void _onGestureDoubleTap() {
+    if (!_isLandscape || _locked) return;
+    final point = _gestureStart;
+    if (point == null) return;
+    final width = MediaQuery.sizeOf(context).width;
+    if (point.dx < width / 3) {
+      _skip(-10);
+    } else if (point.dx > width * 2 / 3) {
+      _skip(10);
+    } else {
+      final controller = _player;
+      if (controller == null) return;
+      controller.value.isPlaying ? controller.pause() : controller.play();
+      _kick();
+    }
+    _gestureStart = null;
+  }
+
+  void _onGesturePanStart(DragStartDetails details) {
+    if (!_isLandscape || _locked) return;
+    _gestureStart = details.localPosition;
+    _gestureStartPosition = _player?.value.position ?? Duration.zero;
+    final width = MediaQuery.sizeOf(context).width;
+    final controller = _player;
+    if (details.localPosition.dx < width / 2) {
+      _gestureMode = 'brightness';
+      _gestureStartValue = 0.5;
+      _playerChannel.invokeMethod<double>('getBrightness').then((v) {
+        if (mounted && _gestureMode == 'brightness' && v != null) {
+          _gestureStartValue = v;
+        }
+      }).catchError((_) {});
+    } else {
+      _gestureMode = 'volume';
+      _gestureStartValue = controller?.value.volume ?? 1.0;
+    }
+    _seekDeltaSeconds = 0;
+    _seekPreview = null;
+  }
+
+  void _onGesturePanUpdate(DragUpdateDetails details) {
+    if (!_isLandscape || _locked || _gestureStart == null) return;
+    final start = _gestureStart!;
+    final dx = details.localPosition.dx - start.dx;
+    final dy = details.localPosition.dy - start.dy;
+    if (_gestureMode == 'brightness' || _gestureMode == 'volume') {
+      final value = (_gestureStartValue - dy / 260).clamp(0.0, 1.0);
+      if (_gestureMode == 'brightness') {
+        _playerChannel.invokeMethod<void>('setBrightness', value).catchError((_) {});
+        _showGestureIndicator(Icons.brightness_6_rounded, 'Brightness ${(value * 100).round()}%', value);
+      } else {
+        _player?.setVolume(value);
+        _showGestureIndicator(Icons.volume_up_rounded, 'Volume ${(value * 100).round()}%', value);
+      }
+    } else {
+      _gestureMode = 'seek';
+      final duration = _player?.value.duration ?? Duration.zero;
+      final delta = (dx / 5).round();
+      _seekDeltaSeconds = delta.toDouble();
+      final target = _gestureStartPosition + Duration(seconds: delta);
+      final clamped = target < Duration.zero
+          ? Duration.zero
+          : (target > duration ? duration : target);
+      setState(() => _seekPreview = clamped);
+      _gestureIndicatorTimer?.cancel();
+    }
+  }
+
+  void _onGesturePanEnd(DragEndDetails details) {
+    if (!_isLandscape || _locked) return;
+    if (_gestureMode == 'seek' && _seekPreview != null) {
+      _player?.seekTo(_seekPreview!);
+      _kick();
+    }
+    setState(() {
+      _gestureMode = null;
+      _gestureStart = null;
+      _seekPreview = null;
+      _indicatorIcon = null;
+      _indicatorLabel = null;
+    });
+  }
+
+  void _onGestureLongPressStart(LongPressStartDetails details) {
+    if (!_isLandscape || _locked) return;
+    _player?.setPlaybackSpeed(2.0);
+    if (mounted) {
+      setState(() {
+        _indicatorIcon = Icons.fast_forward_rounded;
+        _indicatorLabel = '2x Speed';
+        _indicatorValue = 1;
+      });
+    }
+  }
+
+  void _onGestureLongPressEnd(LongPressEndDetails details) {
+    if (!_isLandscape || _locked) return;
+    _player?.setPlaybackSpeed(_rate);
+    if (mounted) setState(() {
+      _indicatorIcon = null;
+      _indicatorLabel = null;
+    });
+  }
+
   void _skip(int seconds) {
     final controller = _player;
     if (controller == null || !controller.value.isInitialized) return;
@@ -775,6 +925,8 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _gestureIndicatorTimer?.cancel();
+    _playerChannel.invokeMethod<void>('resetBrightness').catchError((_) {});
     _saveNow();
     app.progressRev.value++;
     _player?.removeListener(_onPlayerChanged);
@@ -820,17 +972,80 @@ class _PlayerPageState extends State<PlayerPage> {
             )
           else
             const ColoredBox(color: Colors.black),
-          GestureDetector(behavior: HitTestBehavior.opaque, onTap: _locked ? null : _toggleUi),
+          if (_isLandscape && !_locked)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _toggleUi,
+              onDoubleTapDown: _onGestureDoubleTapDown,
+              onDoubleTap: _onGestureDoubleTap,
+              onPanStart: _onGesturePanStart,
+              onPanUpdate: _onGesturePanUpdate,
+              onPanEnd: _onGesturePanEnd,
+              onLongPressStart: _onGestureLongPressStart,
+              onLongPressEnd: _onGestureLongPressEnd,
+            )
+          else
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _locked ? null : _toggleUi,
+            ),
+          if (_isLandscape && _indicatorLabel != null)
+            IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_indicatorIcon != null)
+                        Icon(_indicatorIcon, color: Colors.white, size: 30),
+                      const SizedBox(height: 6),
+                      Text(_indicatorLabel!,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                      if (_gestureMode == 'brightness' || _gestureMode == 'volume') ...[
+                        const SizedBox(height: 9),
+                        SizedBox(width: 150, child: LinearProgressIndicator(
+                          value: _indicatorValue,
+                          minHeight: 4,
+                          backgroundColor: Colors.white30,
+                          color: Colors.white,
+                        )),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (_isLandscape && _seekPreview != null)
+            IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(14)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_seekDeltaSeconds >= 0 ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+                        color: Colors.white, size: 34),
+                      const SizedBox(height: 5),
+                      Text(_previewTime(Duration(seconds: _seekDeltaSeconds.round())),
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+                      Text(_fmt(_seekPreview!), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           IgnorePointer(
             ignoring: !showUi,
             child: AnimatedOpacity(
               opacity: showUi ? 1 : 0,
               duration: const Duration(milliseconds: 200),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _toggleUi,
-                child: _controls(context, msgOn, next),
-              ),
+              child: _controls(context, msgOn, next),
             ),
           ),
         ],
