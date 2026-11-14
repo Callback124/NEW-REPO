@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:encrypt/encrypt.dart' as enc;
+import 'package:dart_des/dart_des.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 
@@ -110,8 +110,10 @@ class JioSaavnPlayer {
     var encrypted = song.encryptedUrl;
     if (encrypted.isEmpty) { final d = await api.songDetails(song.id); encrypted = (d['encrypted_media_url'] ?? '').toString(); }
     if (encrypted.isEmpty) throw Exception('Audio URL not available');
-    final cipher = enc.Encrypter(enc.DES(enc.Key.fromUtf8('38346591'), mode: enc.DESMode.ecb, padding: 'PKCS7'));
-    var url = cipher.decrypt(enc.Encrypted.fromBase64(encrypted)).trim();
+    final decrypted = DES(key: '38346591'.codeUnits, mode: DESMode.ECB).decrypt(base64.decode(encrypted.trim()));
+    final padding = decrypted.isEmpty ? 0 : decrypted.last;
+    final plainBytes = padding > 0 && padding <= 8 && padding <= decrypted.length ? decrypted.sublist(0, decrypted.length - padding) : decrypted;
+    var url = utf8.decode(plainBytes).trim();
     url = url.replaceAll(RegExp(r'_\d+\.(mp4|m4a)'), '_$quality.mp4').replaceFirst('http://', 'https://');
     return url;
   }
