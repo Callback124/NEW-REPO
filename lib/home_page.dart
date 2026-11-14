@@ -130,7 +130,7 @@ class _ProviderSectionState extends State<_ProviderSection> {
                 child: Text('${p.name} has no home catalogs. Try Search.'),
               );
             }
-            return p.kind == 'storytv'\n                ? PosterGrid(items: shelves.expand((s) => s.items).toList())\n                : Column(children: [for (final s in shelves) ShelfRow(shelf: s)]);
+            return p.kind == 'storytv'\n                ? _StoryTvGrid(items: shelves.expand((s) => s.items).toList())\n                : Column(children: [for (final s in shelves) ShelfRow(shelf: s)]);
           },
         ),
       ],
@@ -246,4 +246,26 @@ Future<void> resumeProgress(BuildContext context, Progress pr) async {
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(e.toString())));
   }
+}
+
+class _StoryTvGrid extends StatelessWidget {
+  const _StoryTvGrid({required this.items});
+  final List<Item> items;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+    child: GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: items.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 170, childAspectRatio: .52,
+        mainAxisSpacing: 14, crossAxisSpacing: 12,
+      ),
+      itemBuilder: (context, i) => PosterCard(
+        item: items[i], onTap: () => openDetail(context, items[i]),
+        subtitle: items[i].corner,
+      ),
+    ),
+  );
 }
