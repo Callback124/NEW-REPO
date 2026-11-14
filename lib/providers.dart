@@ -653,7 +653,7 @@ class StoryTvAdapter extends Adapter {
   }
 
   bool _isHindiShow(Map raw) {
-    final keys = <String>{
+    const languageKeys = <String>{
       'langid', 'languageid', 'language_id', 'langcode', 'languagecode',
       'language', 'languagename', 'audiolanguage', 'audio_language',
       'defaultlanguage', 'default_language'
@@ -662,27 +662,29 @@ class StoryTvAdapter extends Adapter {
     void scan(Map value) {
       for (final entry in value.entries) {
         final key = entry.key.toString().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
-        if (keys.contains(key)) values.add(entry.value);
+        if (languageKeys.contains(key)) values.add(entry.value);
         if (entry.value is Map) scan(entry.value as Map);
       }
     }
     scan(raw);
-    if (values.isEmpty) return true; // The API language preference is Hindi; keep entries with no language metadata.
-    bool? parsed;
+    if (values.isEmpty) return true;
     for (final value in values) {
       if (value == null) continue;
       if (value is num) {
-        final isHindi = value.toInt() == 2;
-        if (!isHindi) return false;
-        parsed = true;
+        if (value.toInt() != 2) return false;
         continue;
       }
-      final text = value.toString().trim().toLowerCase();
-      if (text.isEmpty) continue;
-      if (text == '2' || text == 'hi' || text == 'hin' ||
-          text.contains('hindi') || text.contains('हिंदी') || text.contains('हिन्दी')) {
-        parsed = true;
-      } else if (RegExp(r'^\d+
+      final language = value.toString().trim().toLowerCase();
+      if (language.isEmpty) continue;
+      if (language == '2' || language == 'hi' || language == 'hin' ||
+          language.contains('hindi') || language.contains('हिंदी') ||
+          language.contains('हिन्दी')) continue;
+      if (RegExp(r'^\d+$').hasMatch(language) ||
+          RegExp(r'^[a-z]{2,3}(-[a-z]{2})?$').hasMatch(language)) return false;
+    }
+    return true;
+  }
+
   bool _moreFrom(Map data, int page, int size, List raw) {
     final totalPages = int.tryParse((data['totalPages'] ?? data['pageCount'] ?? '').toString());
     if (totalPages != null) return page + 1 < totalPages;
@@ -775,13 +777,13 @@ class StoryTvAdapter extends Adapter {
         }
         return [Source.clean(name:'Auto', url:url, headers:_playerHeaders)];
       }
-      final lines = body.split(RegExp(r'\\r?\\n'));
+      final lines = body.split(RegExp(r'\r?\n'));
       final variants = <({int height, int bandwidth, String uri, String codecs})>[];
       for (var i=0; i<lines.length; i++) {
         final line=lines[i].trim();
         if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
-        final height=int.tryParse(RegExp(r'RESOLUTION=\\d+x(\\d+)',caseSensitive:false).firstMatch(line)?.group(1) ?? '') ?? 0;
-        final bandwidth=int.tryParse(RegExp(r'(?:AVERAGE-)?BANDWIDTH=(\\d+)',caseSensitive:false).firstMatch(line)?.group(1) ?? '') ?? 0;
+        final height=int.tryParse(RegExp(r'RESOLUTION=\d+x(\d+)',caseSensitive:false).firstMatch(line)?.group(1) ?? '') ?? 0;
+        final bandwidth=int.tryParse(RegExp(r'(?:AVERAGE-)?BANDWIDTH=(\d+)',caseSensitive:false).firstMatch(line)?.group(1) ?? '') ?? 0;
         final codecs=RegExp(r'CODECS="([^"]+)"',caseSensitive:false).firstMatch(line)?.group(1) ?? '';
         var next=i+1;
         while(next<lines.length && lines[next].trim().isEmpty) { next++; }
