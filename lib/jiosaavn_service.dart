@@ -94,9 +94,6 @@ class JioSaavnApi {
     if (!sections.any((s) => s.title == 'Free Hits')) {
       try { final d = await call('search.getPlaylistResults', {'q': 'Free Hits', 'p': '1', 'n': '20'}); add('Free Hits', d); } catch (_) {}
     }
-    if (!sections.any((s) => s.title == 'Devotional / Bhakti')) {
-      try { final d = await call('search.getPlaylistResults', {'q': 'Bhakti', 'p': '1', 'n': '20'}); add('Devotional / Bhakti', d); } catch (_) {}
-    }
     if (!sections.any((s) => s.title == 'Best of 90s')) {
       try { final d = await call('search.getPlaylistResults', {'q': '90s Bollywood', 'p': '1', 'n': '20'}); add('Best of 90s', d); } catch (_) {}
     }
