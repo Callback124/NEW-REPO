@@ -324,7 +324,7 @@ class _DownloadPageState extends State<DownloadPage> {
       }
       await Future.wait(List.generate(sorted.length < 3 ? sorted.length : 3, (_) => worker()));
       if (workerError != null) throw workerError!;
-      await concat.writeAsString(paths.map((p) => "file '${p.replaceAll("'", "'\\''")}'\n").join());
+      await concat.writeAsString(paths.map((p) => "file '${p!.replaceAll("'", "'\\''")}'\n").join());
       final merge = await FFmpegKit.executeWithArguments([
         '-y', '-f', 'concat', '-safe', '0', '-i', concat.path,
         '-c', 'copy', '-movflags', '+faststart', output,
