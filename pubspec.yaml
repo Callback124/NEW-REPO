@@ -16,6 +16,8 @@ dependencies:
   flutter_svg: ^2.0.10+1
   url_launcher: ^6.3.0
   video_player: ^2.14.1
+  ffmpeg_kit_flutter_new_https: ^2.6.8
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
