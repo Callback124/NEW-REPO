@@ -285,6 +285,8 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
   int _page = 0;
   bool _hasMore = true;
   bool _loadingMore = false;
+  bool _loadError = false;
+  int _emptyPages = 0;
 
   @override
   void initState() {
@@ -311,13 +313,13 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
 
   void _onScroll() {
     if (!mounted || !widget.scrollController.hasClients ||
-        widget.scrollController.position.extentAfter > 650) return;
+        widget.scrollController.position.extentAfter > 900) return;
     _loadMore();
   }
 
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
-    _loadingMore = true;
+    setState(() { _loadingMore = true; _loadError = false; });
     try {
       final next = await StoryTvAdapter().explorePage(widget.provider, page: _page + 1);
       if (!mounted) return;
@@ -326,12 +328,14 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
       setState(() {
         _items.addAll(fresh);
         _page++;
-        _hasMore = next.hasMore && fresh.isNotEmpty;
+        _emptyPages = fresh.isEmpty ? _emptyPages + 1 : 0;
+        _hasMore = next.hasMore && _emptyPages < 2;
         _loadingMore = false;
+        _loadError = false;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
     } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted) setState(() { _loadingMore = false; _loadError = true; });
     }
   }
 
@@ -360,6 +364,17 @@ class _StoryTvGridState extends State<_StoryTvGrid> {
           const Padding(
             padding: EdgeInsets.all(16),
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          )
+        else if (_loadError)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Center(
+              child: TextButton.icon(
+                onPressed: _loadMore,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry loading more'),
+              ),
+            ),
           ),
       ],
     ),
