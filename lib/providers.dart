@@ -653,7 +653,7 @@ class StoryTvAdapter extends Adapter {
     if (totalPages != null) return page + 1 < totalPages;
     final totalElements = int.tryParse((data['totalElements'] ?? data['total'] ?? data['count'] ?? '').toString());
     if (totalElements != null) return (page + 1) * size < totalElements;
-    final last = data['last'] ?? data['isLast'] ?? data['hasNext'] == null ? null : null;
+    final last = data['last'] ?? data['isLast'];
     if (last is bool) return !last;
     final hasNext = data['hasNext'] ?? data['hasMore'];
     if (hasNext is bool) return hasNext;
@@ -727,12 +727,12 @@ class StoryTvAdapter extends Adapter {
       if (response.statusCode < 200 || response.statusCode >= 300) return url;
       final body = utf8.decode(response.bodyBytes);
       if (!body.contains('#EXT-X-STREAM-INF')) return url;
-      final lines = body.split(RegExp(r'\\r?\\n'));
+      final lines = body.split(RegExp(r'\r?\n'));
       final variants = <({int height, String uri})>[];
       for (var i = 0; i < lines.length; i++) {
         final line = lines[i].trim();
         if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
-        final resolution = RegExp(r'RESOLUTION=\\d+x(\\d+)', caseSensitive: false).firstMatch(line);
+        final resolution = RegExp(r'RESOLUTION=\d+x(\d+)', caseSensitive: false).firstMatch(line);
         final height = int.tryParse(resolution?.group(1) ?? '') ?? 0;
         var next = i + 1;
         while (next < lines.length && lines[next].trim().isEmpty) { next++; }
